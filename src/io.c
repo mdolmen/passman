@@ -14,7 +14,6 @@ void io_header()
 
 void io_menu_login()
 {
-    unsigned short choice = 0;
     char* menu =
         "Menu"
         "\n===="
@@ -41,16 +40,17 @@ void io_menu()
     printf("%s\n\nSelect your option: ", menu);
 }
 
-unsigned short io_choice()
+unsigned short io_get_choice()
 {
     char buffer[BUF_SIZE] = { '\0' };
     unsigned short choice = 0;
 
     // If the user enter more than a digit, we delete the rest by inserting a
     // null char.
-    fgets(buffer, BUF_SIZE, stdin);
-    buffer[1] = '\0';
-    sscanf(buffer, "%hu", &choice);
+    if ( fgets(buffer, BUF_SIZE, stdin) ) {
+        buffer[1] = '\0';
+        sscanf(buffer, "%hu", &choice);
+    }
 
     return choice;
 }

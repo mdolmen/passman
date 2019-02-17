@@ -18,7 +18,7 @@ void io_menu_login();
 /*
  * Handling of user input to make a choice at a menu.
  */
-unsigned short io_choice();
+unsigned short io_get_choice();
 
 /*
  * Handling of user input for strings.

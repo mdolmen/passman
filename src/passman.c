@@ -35,6 +35,8 @@ status_t pm_login(unsigned short method)
         free(pass);
         pass = NULL;
     }
+
+    return PM_SUCCESS;
 }
 
 /*
@@ -43,26 +45,25 @@ status_t pm_login(unsigned short method)
  */
 status_t pm_create_user(unsigned short method)
 {
-    // TODO : take user input
     char* login = NULL;
     char* pass = NULL;
-
-    //const unsigned char m[...];
-    unsigned long long mlen;
     unsigned char h_login[crypto_hash_BYTES];
     unsigned char h_pass[crypto_hash_BYTES];
 
     if (LOGIN_PASS == method) {
-        // TODO : take user input (login + pass)
+        // take user input (login + pass)
+        printf("Login: ");
         login = io_get_string(BUF_SIZE);
+        printf("Password: ");
         pass = io_get_string(BUF_SIZE);
+        // TODO : double check password ?
 
         // TODO : hash and concatenate (login + mdp)
-        if ( crypto_hash(h_login, (const char*)login, (unsigned long long)strlen(login)) != 0 ) {
+        if ( crypto_hash(h_login, (const unsigned char*)login, (unsigned long long)strlen(login)) != 0 ) {
             perror("crypto_hash");
             exit(PM_FAILURE);
         }
-        if ( crypto_hash(h_pass, (const char*)pass, (unsigned long long)strlen(pass)) != 0 ) {
+        if ( crypto_hash(h_pass, (const unsigned char*)pass, (unsigned long long)strlen(pass)) != 0 ) {
             perror("crypto_hash");
             exit(PM_FAILURE);
         }
@@ -70,6 +71,10 @@ status_t pm_create_user(unsigned short method)
         printf("login: %s", login);
         for (int i = 0; i < crypto_hash_BYTES; i++) {
             printf("%02x", h_login[i]);
+        }
+        printf("pass: %s", pass);
+        for (int i = 0; i < crypto_hash_BYTES; i++) {
+            printf("%02x", h_pass[i]);
         }
 
         // TODO : count file in data/ to compute new id
@@ -88,6 +93,8 @@ status_t pm_create_user(unsigned short method)
         free(pass);
         pass = NULL;
     }
+
+    return PM_SUCCESS;
 }
 
 /*
@@ -137,7 +144,7 @@ int main(void)
     io_header();
     io_menu_login();
 
-    while ( (choice = io_choice()) != 4) {
+    while ( (choice = io_get_choice()) != 4) {
         switch (choice) {
             case 1:
                 // TODO : login with pass
