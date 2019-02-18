@@ -20,17 +20,14 @@ typedef struct _pass_auth_log {
     unsigned char* h_pass;
 } pass_auth_log;
 
-/*
- * Write what is in the buffer into a file.
- */
-void flushBuffer();
-
-/*
- * Release memory allocated for he log buffer.
- */
-void freeLogBuffer();
+void logIntoFile(
+    char* output,
+    log_identifier type,
+    unsigned char* data,
+    unsigned long dataSize);
 
 void logPassAuthData (
+    char* output,
     unsigned long id,
     unsigned long h_length,
     unsigned char* h_login,
