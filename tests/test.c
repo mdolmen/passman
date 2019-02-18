@@ -70,6 +70,10 @@ START_TEST(t_io_get_choice_2)
 }
 END_TEST
 
+// TODO : utils_count_file_dir
+
+// TODO : pm_create_user
+
 Suite* passman_suite(void)
 {
     Suite* s = NULL;

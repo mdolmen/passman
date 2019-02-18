@@ -25,20 +25,23 @@ LDFLAGS=-z relro
 # TARGETS
 # -------
 
-passman: $(SRC)/passman.o $(SRC)/io.o $(SRC)/utils.o
+passman: $(SRC)/passman.o $(SRC)/io.o $(SRC)/utils.o $(SRC)/logger.o
 	$(LD) $(LDFLAGS) -o $(BIN)/$@ $^ $(CFLAGS)
 
 test: $(TEST)/test.o $(SRC)/io.o $(SRC)/utils.o
 	$(LD) $(LDFLAGS) -o $(TEST)/$@ $^ $(CFLAGS) $(TEST_FLAGS)
 
 
-passman.o: $(SRC)/passman.c $(INCLUDE)/passman.h
+passman.o: $(SRC)/passman.c $(INCLUDE)/passman.h $(INCLUDE)/logger.h
 	$(CC) -c $< $(CFLAGS)
 
 io.o: $(SRC)/io.c $(INCLUDE)/io.h $(INCLUDE)/utils.h
 	$(CC) -c $< $(CFLAGS)
 
-utils.o: $(SRC)/utils.o $(INLCUDE)/utils.h
+utils.o: $(SRC)/utils.o $(INCLUDE)/utils.h
+	$(CC) -c $< $(CFLAGS)
+
+logger.o: $(SRC)/logger.c $(INCLUDE)/logger.h $(INCLUDE)/utils.h
 	$(CC) -c $< $(CFLAGS)
 
 test.o : $(TEST)/test.c $(INCLUDE)/io.h

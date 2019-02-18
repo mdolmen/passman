@@ -2,9 +2,12 @@
 #include <stdlib.h>
 #include <string.h>
 #include <crypto_hash.h>
+#include <linux/limits.h>
 
 #include "passman.h"
 #include "io.h"
+#include "logger.h"
+#include "utils.h"
 
 /*
  * Allows a user to connect and open up his file.
@@ -45,20 +48,22 @@ status_t pm_login(unsigned short method)
  */
 status_t pm_create_user(unsigned short method)
 {
+    char new_file[PATH_MAX] = { '\0' };
     char* login = NULL;
     char* pass = NULL;
-    unsigned char h_login[crypto_hash_BYTES];
-    unsigned char h_pass[crypto_hash_BYTES];
+    unsigned char h_login[crypto_hash_BYTES] = { '\0' };
+    unsigned char h_pass[crypto_hash_BYTES] = { '\0' };
+    unsigned long id = 0;
 
     if (LOGIN_PASS == method) {
-        // take user input (login + pass)
+        // take user input
         printf("Login: ");
         login = io_get_string(BUF_SIZE);
         printf("Password: ");
         pass = io_get_string(BUF_SIZE);
         // TODO : double check password ?
 
-        // TODO : hash and concatenate (login + mdp)
+        // hash (sha512) login and pass
         if ( crypto_hash(h_login, (const unsigned char*)login, (unsigned long long)strlen(login)) != 0 ) {
             perror("crypto_hash");
             exit(PM_FAILURE);
@@ -68,17 +73,23 @@ status_t pm_create_user(unsigned short method)
             exit(PM_FAILURE);
         }
 
-        printf("login: %s", login);
+#ifdef PM_DEBUG
+        printf("(debug) login: %s", login);
         for (int i = 0; i < crypto_hash_BYTES; i++) {
             printf("%02x", h_login[i]);
         }
-        printf("pass: %s", pass);
+        printf("(debug) pass: %s", pass);
         for (int i = 0; i < crypto_hash_BYTES; i++) {
             printf("%02x", h_pass[i]);
         }
+#endif
 
-        // TODO : count file in data/ to compute new id
-        // TODO : write id + hashs to a new file
+        // compute ID based on current number of user (1 per file in 'data/')
+        id = utils_count_file_dir("data/") + 1;
+
+        // write data to a new file
+        snprintf(new_file, PATH_MAX, "data/%ld.pm", id);
+        logPassAuthData(new_file, id, (unsigned long)crypto_hash_BYTES, h_login, h_pass);
     }
     else {
         // TODO : take user input (login + key path)
@@ -86,12 +97,10 @@ status_t pm_create_user(unsigned short method)
 
     // Free resources.
     if (login) {
-        free(login);
-        login = NULL;
+        free(login); login = NULL;
     }
     if (pass) {
-        free(pass);
-        pass = NULL;
+        free(pass); pass = NULL;
     }
 
     return PM_SUCCESS;

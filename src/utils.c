@@ -1,5 +1,6 @@
 #include <stdlib.h>
 #include <stdio.h>
+#include <dirent.h>
 
 void *utils_malloc(size_t size)
 {
@@ -38,4 +39,26 @@ void utils_free_ptr_array(void **array, int nb_items)
         free(array);
         array = NULL;
     }
+}
+
+unsigned int utils_count_file_dir(const char* path)
+{
+    unsigned int nb_files = 0;
+    DIR* directory = NULL;
+    struct dirent* entry = NULL;
+
+    directory = opendir(path);
+
+    if (directory) {
+        while ( (entry = readdir(directory)) ) {
+            // DT_REG : entry is a regular file
+            if (DT_REG == entry->d_type)
+                nb_files++;
+        }
+    }
+
+    closedir(directory);
+    if (entry) free(entry);
+
+    return nb_files;
 }

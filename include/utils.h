@@ -16,4 +16,9 @@ void *utils_realloc(void *ptr, size_t size);
  */
 void utils_free_ptr_array(void **array, int nb_items);
 
+/*
+ * Return the number of files in a directory.
+ */
+unsigned int utils_count_file_dir(const char* path);
+
 #endif // UTILS_H

@@ -1,5 +1,5 @@
-#ifndef LOGGER_H
-#define LOGGER_H
+#ifndef IO_H
+#define IO_H
 
 #define BUF_SIZE    128
 
@@ -25,4 +25,4 @@ unsigned short io_get_choice();
  */
 char* io_get_string(unsigned short max_length);
 
-#endif // LOGGER_H
+#endif // IO_H
