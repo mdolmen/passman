@@ -33,4 +33,9 @@ void logPassAuthData (
     unsigned char* h_login,
     unsigned char* h_pass);
 
+void readPassAuthData (
+    char* input,
+    unsigned char** h_login,
+    unsigned char** h_pass);
+
 #endif // LOGGER_H

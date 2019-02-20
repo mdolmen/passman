@@ -11,7 +11,7 @@ void io_header();
 /*
  * Print options menu to the user.
  */
-void io_menu();
+void io_menu(const char* user);
 
 void io_menu_login();
 

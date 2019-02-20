@@ -25,19 +25,19 @@ void io_menu_login()
     printf("%s\n\nSelect your option: ", menu);
 }
 
-void io_menu()
+void io_menu(const char* user)
 {
-    char* menu =
-        "Welcome X"
-        "\n========="
-        "\n\t1. Add a password"
-        "\n\t2. Delete a password"
-        "\n\t3. Edit a password"
-        "\n\t4. Display all my passwords"
-        "\n\t5. Delete all my passwords"
-        "\n\t6. Quit";
-
-    printf("%s\n\nSelect your option: ", menu);
+    printf(
+        "\nWelcome %s"
+        "========="
+        "\n  1. Add a password"
+        "\n  2. Delete a password"
+        "\n  3. Edit a password"
+        "\n  4. Display all my passwords"
+        "\n  5. Delete all my passwords"
+        "\n  6. Quit"
+        "\n\nSelect your option: ",
+        user);
 }
 
 unsigned short io_get_choice()

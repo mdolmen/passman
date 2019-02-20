@@ -9,6 +9,7 @@
 
 #include "passman.h"
 #include "io.h"
+#include "utils.h"
 
 /*
  * Normal input.
@@ -50,7 +51,7 @@ START_TEST(t_io_get_choice_2)
     char* s = "fkrbqzi(aàç(th";
 
     // Re-open stdin as "tests/data", so we can pass input to our function.
-    f = freopen("tests/data", "w+", stdin);
+    f = freopen("tests/input", "w+", stdin);
     if (f) {
         fwrite(s, strlen(s), 1, f);
     }
@@ -70,9 +71,22 @@ START_TEST(t_io_get_choice_2)
 }
 END_TEST
 
-// TODO : utils_count_file_dir
+START_TEST(t_utils_count_file_dir)
+{
+    const char* path = "tests/folder";
+    unsigned int nb = 0;
 
-// TODO : pm_create_user
+    nb = utils_count_file_dir(path);
+
+	ck_assert_msg(
+	    nb == 2,
+		"Number of files in %s is 2.\n"
+		"nb = %d",
+        path,
+		nb
+	);
+}
+END_TEST
 
 Suite* passman_suite(void)
 {
@@ -85,6 +99,7 @@ Suite* passman_suite(void)
 
     tcase_add_test(tc_core, t_io_get_choice_1);
     tcase_add_test(tc_core, t_io_get_choice_2);
+    tcase_add_test(tc_core, t_utils_count_file_dir);
 
     suite_add_tcase(s, tc_core);
 

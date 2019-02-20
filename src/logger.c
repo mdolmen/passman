@@ -3,11 +3,14 @@
 #include <string.h>
 #include <pthread.h>
 #include <errno.h>
+#include <sys/mman.h>
+#include <unistd.h>
 
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
 
+#include "passman.h"
 #include "logger.h"
 #include "utils.h"
 
@@ -92,4 +95,56 @@ void logPassAuthData (
     free(log_data);
 
     return;
+}
+
+void readPassAuthData (
+    char* input,
+    unsigned char** h_login,
+    unsigned char** h_pass)
+{
+    unsigned long log_type = 0, entry_size = 0;
+    unsigned long size_entry_header = sizeof(unsigned long) * 2;
+    unsigned long h_length = 0;
+    void* buffer = NULL, *tmp = NULL;
+    int fd = 0;
+
+    // map the file into memory so we can retrieve data by accessing structure
+    // member
+    fd = open((const char*)input, O_RDONLY);
+    buffer = mmap(NULL, size_entry_header, PROT_READ, MAP_PRIVATE, fd, 0);
+    if ( MAP_FAILED == buffer )
+        return;
+
+    // read entry header informations
+    log_type = ((log_entry_header*)buffer)->logType;
+    entry_size = ((log_entry_header*)buffer)->entrySize;
+    munmap(buffer, size_entry_header);
+
+    if ( log_type == pass_auth_log_id ) {
+        // re-map with the full entry size (header + pass_auth_log)
+        buffer = mmap(NULL, entry_size, PROT_READ, MAP_PRIVATE, fd, 0);
+        if ( !buffer )
+            return;
+
+        // need for an intermediate pointer so we can free the whole mapped
+        // memory afterwards
+        tmp = buffer + size_entry_header;
+
+        h_length = ((pass_auth_log*)tmp)->h_length;
+        tmp = &((pass_auth_log*)tmp)->h_login;
+
+        // read hash login
+        *h_login = utils_malloc((size_t)h_length);
+        if (h_login) {
+            memcpy(*h_login, tmp, h_length);
+            tmp += h_length;
+        }
+
+        // read hash password
+        *h_pass = utils_malloc((size_t)h_length);
+        if (h_pass)
+            memcpy(*h_pass, tmp, h_length);
+    }
+
+    if (buffer) munmap(buffer, entry_size);
 }

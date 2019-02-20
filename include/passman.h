@@ -5,7 +5,7 @@
 #define LOGIN_KEY   2
 
 // uncomment to disable debug output
-#define PM_DEBUG_1
+//#define PM_DEBUG_1
 
 typedef enum status {
     PM_SUCCESS,
