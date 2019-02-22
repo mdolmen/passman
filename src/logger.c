@@ -53,10 +53,11 @@ void logIntoFile(char* output, log_identifier type, unsigned char* data, unsigne
 
 void logPassAuthData (
     char* output,
-    unsigned long id,
     unsigned long h_length,
+    unsigned long salt_length,
     unsigned char* h_login,
-    unsigned char* h_pass)
+    unsigned char* h_pass,
+    unsigned char* salt)
 {
     unsigned char *log_data = NULL, *tmp = NULL;
     unsigned long log_data_size = 0;
@@ -71,12 +72,15 @@ void logPassAuthData (
     if (h_pass != NULL) {
         log_data_size += h_length;
     }
+    if (salt != NULL) {
+        log_data_size += salt_length;
+    }
 
     // Copy data
     log_data = utils_malloc((size_t)log_data_size);
 
-    ((pass_auth_log*)log_data)->id = id;
     ((pass_auth_log*)log_data)->h_length = h_length;
+    ((pass_auth_log*)log_data)->salt_length = salt_length;
 
     tmp = (unsigned char*) &((pass_auth_log*)log_data)->h_login;
 
@@ -87,6 +91,10 @@ void logPassAuthData (
     if (h_pass != NULL) {
         memcpy(tmp, h_pass, h_length);
         tmp += h_length;
+    }
+    if (salt != NULL) {
+        memcpy(tmp, salt, salt_length);
+        tmp += salt_length;
     }
 
 #ifdef PM_DEBUG_1
@@ -102,11 +110,12 @@ void logPassAuthData (
 void readPassAuthData (
     char* input,
     unsigned char** h_login,
-    unsigned char** h_pass)
+    unsigned char** h_pass,
+    unsigned char** salt)
 {
     unsigned long log_type = 0, entry_size = 0;
     unsigned long size_entry_header = sizeof(unsigned long) * 2;
-    unsigned long h_length = 0;
+    unsigned long h_length = 0, salt_length = 0;;
     void* buffer = NULL, *tmp = NULL;
     int fd = 0;
 
@@ -133,6 +142,7 @@ void readPassAuthData (
         tmp = buffer + size_entry_header;
 
         h_length = ((pass_auth_log*)tmp)->h_length;
+        salt_length = ((pass_auth_log*)tmp)->salt_length;
         tmp = &((pass_auth_log*)tmp)->h_login;
 
         // read hash login
@@ -144,8 +154,15 @@ void readPassAuthData (
 
         // read hash password
         *h_pass = utils_malloc((size_t)h_length);
-        if (h_pass)
+        if (h_pass) {
             memcpy(*h_pass, tmp, h_length);
+            tmp += h_length;
+        }
+
+        // read salt
+        *salt = utils_malloc((size_t)salt_length);
+        if (salt)
+            memcpy(*salt, tmp, salt_length);
     }
 
     if (buffer) munmap(buffer, entry_size);

@@ -14,10 +14,11 @@ typedef struct _log_entry_header {
 } log_entry_header;
 
 typedef struct _pass_auth_log {
-    unsigned long id;
     unsigned long h_length;
+    unsigned long salt_length;
     unsigned char* h_login;
     unsigned char* h_pass;
+    unsigned char* salt;
 } pass_auth_log;
 
 typedef struct _creds_entry_log {
@@ -40,10 +41,11 @@ void logIntoFile(
  */
 void logPassAuthData (
     char* output,
-    unsigned long id,
     unsigned long h_length,
+    unsigned long salt_length,
     unsigned char* h_login,
-    unsigned char* h_pass);
+    unsigned char* h_pass,
+    unsigned char* salt);
 
 /*
  * Read authentication details from a file.
@@ -52,7 +54,8 @@ void logPassAuthData (
 void readPassAuthData (
     char* input,
     unsigned char** h_login,
-    unsigned char** h_pass);
+    unsigned char** h_pass,
+    unsigned char** salt);
 
 /*
  * Log credentials for a given platform (website, app, etc.).
