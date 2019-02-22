@@ -13,6 +13,11 @@
 #include "logger.h"
 #include "utils.h"
 
+unsigned short auth = 0;
+char* login = NULL;
+char* pass = NULL;
+char user_db[PATH_MAX] = { '\0' };
+
 /*
  * Allows a user to connect and open up his file.
  */
@@ -21,12 +26,10 @@ status_t pm_login(unsigned short method)
     DIR* directory = NULL;
     struct dirent* entry = NULL;
     char input[PATH_MAX] = { '\0' };
-    char* login = NULL;
-    char* pass = NULL;
     unsigned char h_ulogin[crypto_hash_BYTES] = { '\0' };
     unsigned char h_upass[crypto_hash_BYTES] = { '\0' };
     unsigned char* h_login = NULL, *h_pass = NULL;
-    short cmp = 0, auth = 0;
+    short cmp = 0;
 
     if (LOGIN_PASS == method) {
         // take user input
@@ -64,8 +67,10 @@ status_t pm_login(unsigned short method)
                         cmp += crypto_verify_32(h_upass, h_pass);
                         cmp += crypto_verify_32(h_upass+32, h_pass+32);
 
-                        if (cmp == 0)
+                        if (cmp == 0) {
+                            memcpy(user_db, input, strlen(input));
                             auth = 1;
+                        }
 
                         free(h_login); h_login = NULL;
                         free(h_pass); h_pass = NULL;
@@ -79,13 +84,6 @@ status_t pm_login(unsigned short method)
     else {
         // TODO : take user input (login + key path)
     }
-
-    if ( auth )
-        io_menu((const char*)login);
-
-    // Free resources.
-    if (login) { free(login); login = NULL; }
-    if (pass) { free(pass); pass = NULL; }
 
     return PM_SUCCESS;
 }
@@ -144,12 +142,8 @@ status_t pm_create_user(unsigned short method)
     }
 
     // Free resources.
-    if (login) {
-        free(login); login = NULL;
-    }
-    if (pass) {
-        free(pass); pass = NULL;
-    }
+    if (login) { free(login); login = NULL; }
+    if (pass) { free(pass); pass = NULL; }
 
     return PM_SUCCESS;
 }
@@ -201,7 +195,7 @@ int main(void)
     io_header();
     io_menu_login();
 
-    while ( (choice = io_get_choice()) != 4) {
+    while ( !auth && (choice = io_get_choice()) != 4 ) {
         switch (choice) {
             case 1:
                 pm_login(LOGIN_PASS);
@@ -219,12 +213,35 @@ int main(void)
                 break;
         }
 
-        printf("\nSelect your option: ");
     }
 
     // At this point the user is authenticated.
 
-    // TODO : print menu while not 7
+    io_menu((const char*)login);
+
+    while ( (choice = io_get_choice()) != 6 ) {
+        switch (choice) {
+            case 1:
+                break;
+            case 2:
+                break;
+            case 3:
+                break;
+            case 4:
+                break;
+            case 5:
+                break;
+            case 6:
+                return PM_SUCCESS;
+            default:
+                puts("Invalid choice!");
+                break;
+        }
+    }
+
+    // Free resources.
+    if (login) { free(login); login = NULL; }
+    if (pass) { free(pass); pass = NULL; }
 
     return PM_SUCCESS;
 }

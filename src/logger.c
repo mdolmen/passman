@@ -89,7 +89,9 @@ void logPassAuthData (
         tmp += h_length;
     }
 
-    printf("log_data_size: %ld\n", log_data_size);
+#ifdef PM_DEBUG_1
+    printf("(debug) log_data_size: %ld\n", log_data_size);
+#endif
     logIntoFile(output, pass_auth_log_id, log_data, log_data_size);
 
     free(log_data);
@@ -147,4 +149,62 @@ void readPassAuthData (
     }
 
     if (buffer) munmap(buffer, entry_size);
+}
+
+void logCredsEntryData(
+    char* output,
+    unsigned long platform_length,
+    unsigned long login_length,
+    unsigned long pass_length,
+    unsigned char* platform,
+    unsigned char* login,
+    unsigned char* pass)
+{
+    unsigned char *log_data = NULL, *tmp = NULL;
+    unsigned long log_data_size = 0;
+
+    // Count space only for fields that will be present for sure (even if ==
+    // 0) in the structure
+    log_data_size = sizeof(unsigned long) * 3;
+
+    if (platform != NULL) {
+        log_data_size += platform_length;
+    }
+    if (login != NULL) {
+        log_data_size += login_length;
+    }
+    if (pass != NULL) {
+        log_data_size += pass_length;
+    }
+
+    // Copy data
+    log_data = utils_malloc((size_t)log_data_size);
+
+    ((creds_entry_log*)log_data)->platform_length = platform_length;
+    ((creds_entry_log*)log_data)->login_length = login_length;
+    ((creds_entry_log*)log_data)->pass_length = pass_length;
+
+    tmp = (unsigned char*) &((creds_entry_log*)log_data)->platform;
+
+    if (platform != NULL) {
+        memcpy(tmp, platform, platform_length);
+        tmp += platform_length;
+    }
+    if (login != NULL) {
+        memcpy(tmp, login, login_length);
+        tmp += login_length;
+    }
+    if (pass != NULL) {
+        memcpy(tmp, pass, pass_length);
+        tmp += pass_length;
+    }
+
+#ifdef PM_DEBUG_1
+    printf("(debug) log_data_size: %ld\n", log_data_size);
+#endif
+    logIntoFile(output, creds_entry_log_id, log_data, log_data_size);
+
+    free(log_data);
+
+    return;
 }

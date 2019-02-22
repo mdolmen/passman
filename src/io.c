@@ -14,15 +14,13 @@ void io_header()
 
 void io_menu_login()
 {
-    char* menu =
+    printf(
         "Menu"
         "\n===="
         "\n  1. Login with password"
         "\n  2. Login with key"
         "\n  3. Create user"
-        "\n  4. Quit";
-
-    printf("%s\n\nSelect your option: ", menu);
+        "\n  4. Quit\n");
 }
 
 void io_menu(const char* user)
@@ -35,8 +33,7 @@ void io_menu(const char* user)
         "\n  3. Edit a password"
         "\n  4. Display all my passwords"
         "\n  5. Delete all my passwords"
-        "\n  6. Quit"
-        "\n\nSelect your option: ",
+        "\n  6. Quit\n",
         user);
 }
 
@@ -44,6 +41,8 @@ unsigned short io_get_choice()
 {
     char buffer[BUF_SIZE] = { '\0' };
     unsigned short choice = 0;
+
+    printf("\nSelect your option: ");
 
     // If the user enter more than a digit, we delete the rest by inserting a
     // null char.
