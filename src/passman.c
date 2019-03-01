@@ -14,17 +14,10 @@
 #include "logger.h"
 #include "utils.h"
 
-// TODO : replace by a struct
-unsigned short auth = 0;
-char* login = NULL;
-char* pass = NULL;
-unsigned char* salt = NULL;
-char user_db[PATH_MAX] = { '\0' };
-
 /*
  * Allows a user to connect and open up his file.
  */
-status_t pm_login(unsigned short method)
+status_t pm_login(pm_user* user, unsigned short method)
 {
     status_t status = PM_SUCCESS;
     DIR* directory = NULL;
@@ -38,17 +31,17 @@ status_t pm_login(unsigned short method)
     if (LOGIN_PASS == method) {
         // take user input
         printf("Login: ");
-        login = io_get_string(BUF_SIZE);
+        user->login = io_get_string(BUF_SIZE);
         printf("Password: ");
-        pass = io_get_string(BUF_SIZE);
+        user->pass = io_get_string(BUF_SIZE);
 
         // hash (sha512) login and pass
-        if ( crypto_hash(h_ulogin, (const unsigned char*)login, (unsigned long long)strlen(login)) != 0 ) {
+        if ( crypto_hash(h_ulogin, (const unsigned char*)user->login, (unsigned long long)strlen(user->login)) != 0 ) {
             perror("crypto_hash");
             status = PM_FAILURE;
             goto exit;
         }
-        if ( crypto_hash(h_upass, (const unsigned char*)pass, (unsigned long long)strlen(pass)) != 0 ) {
+        if ( crypto_hash(h_upass, (const unsigned char*)user->pass, (unsigned long long)strlen(user->pass)) != 0 ) {
             perror("crypto_hash");
             status = PM_FAILURE;
             goto exit;
@@ -57,12 +50,12 @@ status_t pm_login(unsigned short method)
         directory = opendir("data/");
 
         if (directory) {
-            while ( (entry = readdir(directory)) && !auth ) {
+            while ( (entry = readdir(directory)) && !(user->auth) ) {
                 // DT_REG : entry is a regular file
                 if (DT_REG == entry->d_type) {
                     // read data from binary file
                     snprintf(input, PATH_MAX, "data/%s", entry->d_name);
-                    readPassAuthData(input, &h_login, &h_pass, &salt);
+                    readPassAuthData( input, &h_login, &h_pass, &(user->salt) );
 
                     // compare
                     if (h_login && h_pass) {
@@ -73,13 +66,15 @@ status_t pm_login(unsigned short method)
                         cmp += crypto_verify_32(h_upass+32, h_pass+32);
 
                         if (cmp == 0) {
-                            memcpy(user_db, input, strlen(input));
-                            auth = 1;
+                            memcpy(user->user_db, input, strlen(input));
+                            user->auth = 1;
                         }
 
                         free(h_login); h_login = NULL;
                         free(h_pass); h_pass = NULL;
-                        free(salt); salt = NULL;
+                        if ( !user->auth ) {
+                            free(user->salt); user->salt = NULL;
+                        }
                     }
                 }
             }
@@ -92,6 +87,8 @@ status_t pm_login(unsigned short method)
     }
 
 exit:
+    if (h_login) { free(h_login); h_login = NULL; }
+    if (h_pass) { free(h_pass); h_pass = NULL; }
 
     return status;
 }
@@ -100,7 +97,7 @@ exit:
  * Create a new user and a create a file that will contains all of his
  * future passwords.
  */
-status_t pm_create_user(unsigned short method)
+status_t pm_create_user(pm_user* user, unsigned short method)
 {
     status_t status = PM_SUCCESS;
     char new_file[PATH_MAX] = { '\0' };
@@ -114,41 +111,42 @@ status_t pm_create_user(unsigned short method)
     if (LOGIN_PASS == method) {
         // take user input
         printf("Login: ");
-        login = io_get_string(BUF_SIZE);
+        user->login = io_get_string(BUF_SIZE);
         while (mismatch) {
-            if (pass) { free(pass); pass = NULL; }
+            if (user->pass) { free(user->pass); user->pass = NULL; }
             if (tmp) { free(tmp); tmp = NULL; }
 
             printf("Password: ");
-            pass = io_get_string(BUF_SIZE);
+            user->pass = io_get_string(BUF_SIZE);
             printf("Confirm password: ");
             tmp = io_get_string(BUF_SIZE);
             putchar('\n');
 
-            mismatch = strcmp(pass, tmp);
+            mismatch = strcmp(user->pass, tmp);
         }
+
         // generate a salt that will be used with the password to get a
         // symetric key ( hash(password+salt) = key ).
         randombytes(salt, SALT_SIZE);
 
         // hash (sha512) login and pass
-        if ( crypto_hash(h_login, (const unsigned char*)login, (unsigned long long)strlen(login)) != 0 ) {
+        if ( crypto_hash(h_login, (const unsigned char*)user->login, (unsigned long long)strlen(user->login)) != 0 ) {
             perror("crypto_hash");
             status = PM_FAILURE;
             goto exit;
         }
-        if ( crypto_hash(h_pass, (const unsigned char*)pass, (unsigned long long)strlen(pass)) != 0 ) {
+        if ( crypto_hash(h_pass, (const unsigned char*)user->pass, (unsigned long long)strlen(user->pass)) != 0 ) {
             perror("crypto_hash");
             status = PM_FAILURE;
             goto exit;
         }
 
 #ifdef PM_DEBUG_1
-        printf("(debug) login: %s", login);
+        printf("(debug) login: %s", user->login);
         for (int i = 0; i < crypto_hash_BYTES; i++) {
             printf("%02x", h_login[i]);
         }
-        printf("(debug) pass: %s", pass);
+        printf("(debug) pass: %s", user->pass);
         for (int i = 0; i < crypto_hash_BYTES; i++) {
             printf("%02x", h_pass[i]);
         }
@@ -204,11 +202,6 @@ status_t pm_add_password()
         exit(PM_FAILURE);
     }
 
-    // Free resources.
-    if (login) { free(login); login = NULL; }
-    if (pass) { free(pass); pass = NULL; }
-    if (tmp) { free(tmp); tmp = NULL; }
-
     return PM_SUCCESS;
 }
 
@@ -247,22 +240,25 @@ status_t pm_delete_all()
 int main(void)
 {
     unsigned short choice = 0;
+    pm_user* user = NULL;
+
+    user = utils_malloc(sizeof(pm_user));
 
     io_header();
     io_menu_login();
 
-    while ( !auth ) {
+    while ( !user->auth ) {
         choice = io_get_choice();
 
         switch (choice) {
             case 1:
-                pm_login(LOGIN_PASS);
+                pm_login(user, LOGIN_PASS);
                 break;
             case 2:
                 // TODO : login with key
                 break;
             case 3:
-                pm_create_user(LOGIN_PASS);
+                pm_create_user(user, LOGIN_PASS);
                 break;
             case 4:
                 goto exit;
@@ -275,7 +271,7 @@ int main(void)
 
     // At this point the user is authenticated.
 
-    io_menu((const char*)login);
+    io_menu((const char*)user->login);
 
     while ( (choice = io_get_choice()) != 6 ) {
         switch (choice) {
@@ -299,9 +295,10 @@ int main(void)
 
 exit:
     // Free resources.
-    if (login) { free(login); login = NULL; }
-    if (pass) { free(pass); pass = NULL; }
-    if (salt) { free(salt); salt = NULL; }
+    if (user->salt) { free(user->salt); user->salt = NULL; }
+    if (user->login) { free(user->login); user->login = NULL; }
+    if (user->pass) { free(user->pass); user->pass = NULL; }
+    if (user) { free(user); user = NULL; }
 
     return PM_SUCCESS;
 }
