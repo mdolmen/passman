@@ -14,6 +14,8 @@
 #include "logger.h"
 #include "utils.h"
 
+#define FREE(x) if(x) { free(x); x = NULL; }
+
 /*
  * Allows a user to connect and open up his file.
  */
@@ -66,7 +68,7 @@ status_t pm_login(pm_user* user, unsigned short method)
                         cmp += crypto_verify_32(h_upass+32, h_pass+32);
 
                         if (cmp == 0) {
-                            memcpy(user->user_db, input, strlen(input));
+                            memcpy(user->db, input, strlen(input));
                             user->auth = 1;
                         }
 
@@ -172,19 +174,21 @@ exit:
 /*
  * Add a password in the file of the corresponding user.
  */
-status_t pm_add_password()
+status_t pm_add_password(pm_user* user)
 {
-    char* login = NULL, *pass = NULL, *tmp = NULL;
-    unsigned char h_login[crypto_hash_BYTES] = { '\0' };
-    unsigned char h_pass[crypto_hash_BYTES] = { '\0' };
+    char* platform = NULL, *login = NULL, *pass = NULL, *tmp = NULL;
     unsigned short mismatch = 1;
 
     // take user input
     printf("Platform: ");
-    login = io_get_string(BUF_SIZE);
+    platform = io_get_string(BUF_SIZE);
     printf("Login: ");
     login = io_get_string(BUF_SIZE);
+
     while (mismatch) {
+        FREE(pass);
+        FREE(tmp);
+
         printf("Password: ");
         pass = io_get_string(BUF_SIZE);
         printf("Confirm password: ");
@@ -193,14 +197,12 @@ status_t pm_add_password()
         mismatch = strcmp(pass, tmp);
     }
 
-    // TODO : use randombytes(x[], sizeof(x)) for salt and iv
-    // TODO : write iv to file before encrypted content
-    // TODO : hash(password + salt) => key
+    logCredsEntryData(user->db, platform, login, pass);
 
-    if ( crypto_hash(h_pass, (const unsigned char*)pass, (unsigned long long)strlen(pass)) != 0 ) {
-        perror("crypto_hash");
-        exit(PM_FAILURE);
-    }
+    FREE(platform);
+    FREE(login);
+    FREE(pass);
+    FREE(tmp);
 
     return PM_SUCCESS;
 }
@@ -253,6 +255,7 @@ int main(void)
         switch (choice) {
             case 1:
                 pm_login(user, LOGIN_PASS);
+                // TODO : add sleep to slow down bruteforce
                 break;
             case 2:
                 // TODO : login with key
@@ -270,12 +273,14 @@ int main(void)
     }
 
     // At this point the user is authenticated.
+    // TODO : decrypt rest of the file here
 
     io_menu((const char*)user->login);
 
     while ( (choice = io_get_choice()) != 6 ) {
         switch (choice) {
             case 1:
+                pm_add_password(user);
                 break;
             case 2:
                 break;

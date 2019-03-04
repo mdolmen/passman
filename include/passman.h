@@ -17,7 +17,7 @@ typedef enum status {
 
 typedef struct _pm_user {
     unsigned short auth;
-    char user_db[PATH_MAX];
+    char db[PATH_MAX];
     unsigned char* salt;
     char* login;
     char* pass;

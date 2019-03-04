@@ -37,7 +37,7 @@ void logIntoFile(char* output, log_identifier type, unsigned char* data, unsigne
     memcpy(logBuffer + sizeof(log_entry_header), data, dataSize);
 
 #ifdef PM_DEBUG_1
-    puts("[+] Writing to disk..");
+    puts("(debug) Writing to disk..");
 #endif
 
     // Write on disk
@@ -131,6 +131,7 @@ void readPassAuthData (
     entry_size = ((log_entry_header*)buffer)->entrySize;
     munmap(buffer, size_entry_header);
 
+    // the first structure should always be an authentication one
     if ( log_type == pass_auth_log_id ) {
         // re-map with the full entry size (header + pass_auth_log)
         buffer = mmap(NULL, entry_size, PROT_READ, MAP_PRIVATE, fd, 0);
@@ -170,27 +171,24 @@ void readPassAuthData (
 
 void logCredsEntryData(
     char* output,
-    unsigned long platform_length,
-    unsigned long login_length,
-    unsigned long pass_length,
-    unsigned char* platform,
-    unsigned char* login,
-    unsigned char* pass)
+    char* platform,
+    char* login,
+    char* pass)
 {
     unsigned char *log_data = NULL, *tmp = NULL;
     unsigned long log_data_size = 0;
-
-    // Count space only for fields that will be present for sure (even if ==
-    // 0) in the structure
-    log_data_size = sizeof(unsigned long) * 3;
+    unsigned long platform_length = 0, login_length = 0, pass_length = 0;
 
     if (platform != NULL) {
+        platform_length = strlen(platform);
         log_data_size += platform_length;
     }
     if (login != NULL) {
+        login_length = strlen(login);
         log_data_size += login_length;
     }
     if (pass != NULL) {
+        pass_length = strlen(pass);
         log_data_size += pass_length;
     }
 
@@ -225,3 +223,67 @@ void logCredsEntryData(
 
     return;
 }
+
+/*
+void readCredsEntryData(
+    char* input,
+    char** platform,
+    char** login,
+    char** pass)
+{
+    unsigned long log_type = 0, entry_size = 0;
+    unsigned long size_entry_header = sizeof(unsigned long) * 2;
+    unsigned long platform_length = 0, login_length = 0, pass_length = 0;
+    void* buffer = NULL, *tmp = NULL;
+    int fd = 0;
+
+    // map the file into memory so we can retrieve data by accessing structure
+    // member
+    fd = open((const char*)input, O_RDONLY);
+    buffer = mmap(NULL, size_entry_header, PROT_READ, MAP_PRIVATE, fd, 0);
+    if ( MAP_FAILED == buffer )
+        return;
+
+    // read entry header informations
+    log_type = ((log_entry_header*)buffer)->logType;
+    entry_size = ((log_entry_header*)buffer)->entrySize;
+    munmap(buffer, size_entry_header);
+
+    // the first structure should always be an authentication one
+    if ( log_type == pass_auth_log_id ) {
+        // re-map with the full entry size (header + pass_auth_log)
+        buffer = mmap(NULL, entry_size, PROT_READ, MAP_PRIVATE, fd, 0);
+        if ( !buffer )
+            return;
+
+        // need for an intermediate pointer so we can free the whole mapped
+        // memory afterwards
+        tmp = buffer + size_entry_header;
+
+        h_length = ((pass_auth_log*)tmp)->h_length;
+        salt_length = ((pass_auth_log*)tmp)->salt_length;
+        tmp = &((pass_auth_log*)tmp)->h_login;
+
+        // read hash login
+        *h_login = utils_malloc((size_t)h_length);
+        if (h_login) {
+            memcpy(*h_login, tmp, h_length);
+            tmp += h_length;
+        }
+
+        // read hash password
+        *h_pass = utils_malloc((size_t)h_length);
+        if (h_pass) {
+            memcpy(*h_pass, tmp, h_length);
+            tmp += h_length;
+        }
+
+        // read salt
+        *salt = utils_malloc((size_t)salt_length);
+        if (salt)
+            memcpy(*salt, tmp, salt_length);
+    }
+
+    if (buffer) munmap(buffer, entry_size);
+}
+*/

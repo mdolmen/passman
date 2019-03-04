@@ -22,9 +22,6 @@ typedef struct _pass_auth_log {
 } pass_auth_log;
 
 typedef struct _creds_entry_log {
-    unsigned long platform_length;
-    unsigned long login_length;
-    unsigned long pass_length;
     unsigned char* platform;
     unsigned char* login;
     unsigned char* pass;
@@ -65,9 +62,9 @@ void logCredsEntryData(
     unsigned long platform_length,
     unsigned long login_length,
     unsigned long pass_length,
-    unsigned char* platform,
-    unsigned char* login,
-    unsigned char* pass);
+    char* platform,
+    char* login,
+    char* pass);
 
 /*
  * Read credentials detail from a file.
@@ -75,8 +72,8 @@ void logCredsEntryData(
  */
 void readCredsEntryData(
     char* input,
-    unsigned char** platform,
-    unsigned char** login,
-    unsigned char** pass);
+    char* platform,
+    char* login,
+    char* pass);
 
 #endif // LOGGER_H
