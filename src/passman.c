@@ -51,13 +51,15 @@ status_t pm_login(pm_user* user, unsigned short method)
 
         directory = opendir("data/");
 
+        // browse files to see if there is a user that correspond to the given
+        // credentials
         if (directory) {
             while ( (entry = readdir(directory)) && !(user->auth) ) {
                 // DT_REG : entry is a regular file
                 if (DT_REG == entry->d_type) {
                     // read data from binary file
                     snprintf(input, PATH_MAX, "data/%s", entry->d_name);
-                    readPassAuthData( input, &h_login, &h_pass, &(user->salt) );
+                    readPassAuthData( input, &h_login, &h_pass, &(user->salt), &user->nb_pass );
 
                     // compare
                     if (h_login && h_pass) {
@@ -72,10 +74,12 @@ status_t pm_login(pm_user* user, unsigned short method)
                             user->auth = 1;
                         }
 
-                        free(h_login); h_login = NULL;
-                        free(h_pass); h_pass = NULL;
+                        FREE(h_login);
+                        FREE(h_pass);
                         if ( !user->auth ) {
-                            free(user->salt); user->salt = NULL;
+                            FREE(user->salt);
+                            FREE(user->login);
+                            FREE(user->pass);
                         }
                     }
                 }
@@ -89,8 +93,8 @@ status_t pm_login(pm_user* user, unsigned short method)
     }
 
 exit:
-    if (h_login) { free(h_login); h_login = NULL; }
-    if (h_pass) { free(h_pass); h_pass = NULL; }
+    FREE(h_login);
+    FREE(h_pass);
 
     return status;
 }
@@ -115,8 +119,8 @@ status_t pm_create_user(pm_user* user, unsigned short method)
         printf("Login: ");
         user->login = io_get_string(BUF_SIZE);
         while (mismatch) {
-            if (user->pass) { free(user->pass); user->pass = NULL; }
-            if (tmp) { free(tmp); tmp = NULL; }
+            FREE(user->pass);
+            FREE(tmp);
 
             printf("Password: ");
             user->pass = io_get_string(BUF_SIZE);
@@ -166,7 +170,7 @@ status_t pm_create_user(pm_user* user, unsigned short method)
     }
 
 exit:
-    if (tmp) { free(tmp); tmp = NULL; }
+    FREE(tmp);
 
     return status;
 }
@@ -198,6 +202,7 @@ status_t pm_add_password(pm_user* user)
     }
 
     logCredsEntryData(user->db, platform, login, pass);
+    updateNbPass(user->db, user->nb_pass + 1);
 
     FREE(platform);
     FREE(login);
@@ -291,6 +296,7 @@ int main(void)
             case 5:
                 break;
             case 6:
+                // TODO : seal and exit
                 goto exit;
             default:
                 puts("Invalid choice!");
@@ -300,10 +306,10 @@ int main(void)
 
 exit:
     // Free resources.
-    if (user->salt) { free(user->salt); user->salt = NULL; }
-    if (user->login) { free(user->login); user->login = NULL; }
-    if (user->pass) { free(user->pass); user->pass = NULL; }
-    if (user) { free(user); user = NULL; }
+    FREE(user->salt);
+    FREE(user->login);
+    FREE(user->pass);
+    FREE(user);
 
     return PM_SUCCESS;
 }

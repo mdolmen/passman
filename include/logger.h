@@ -14,6 +14,7 @@ typedef struct _log_entry_header {
 } log_entry_header;
 
 typedef struct _pass_auth_log {
+    unsigned long nb_pass;
     unsigned long h_length;
     unsigned long salt_length;
     unsigned char* h_login;
@@ -22,6 +23,9 @@ typedef struct _pass_auth_log {
 } pass_auth_log;
 
 typedef struct _creds_entry_log {
+    unsigned long platform_length;
+    unsigned long login_length;
+    unsigned long pass_length;
     unsigned char* platform;
     unsigned char* login;
     unsigned char* pass;
@@ -52,16 +56,14 @@ void readPassAuthData (
     char* input,
     unsigned char** h_login,
     unsigned char** h_pass,
-    unsigned char** salt);
+    unsigned char** salt,
+    unsigned long* nb_pass);
 
 /*
  * Log credentials for a given platform (website, app, etc.).
  */
 void logCredsEntryData(
     char* output,
-    unsigned long platform_length,
-    unsigned long login_length,
-    unsigned long pass_length,
     char* platform,
     char* login,
     char* pass);
@@ -75,5 +77,10 @@ void readCredsEntryData(
     char* platform,
     char* login,
     char* pass);
+
+/*
+ * Update the nbumber of password in the file output.
+ */
+void updateNbPass(char* output, unsigned long new_nb);
 
 #endif // LOGGER_H

@@ -64,7 +64,7 @@ void logPassAuthData (
 
     // Count space only for fields that will be present for sure (even if ==
     // 0) in the structure
-    log_data_size = sizeof(unsigned long) * 2;
+    log_data_size = sizeof(unsigned long) * 3;
 
     if (h_login != NULL) {
         log_data_size += h_length;
@@ -78,6 +78,9 @@ void logPassAuthData (
 
     // Copy data
     log_data = utils_malloc((size_t)log_data_size);
+
+    // nb_pass will be incremented as passwords get added
+    ((pass_auth_log*)log_data)->nb_pass = 0;
 
     ((pass_auth_log*)log_data)->h_length = h_length;
     ((pass_auth_log*)log_data)->salt_length = salt_length;
@@ -111,7 +114,8 @@ void readPassAuthData (
     char* input,
     unsigned char** h_login,
     unsigned char** h_pass,
-    unsigned char** salt)
+    unsigned char** salt,
+    unsigned long* nb_pass)
 {
     unsigned long log_type = 0, entry_size = 0;
     unsigned long size_entry_header = sizeof(unsigned long) * 2;
@@ -142,6 +146,7 @@ void readPassAuthData (
         // memory afterwards
         tmp = buffer + size_entry_header;
 
+        *nb_pass = ((pass_auth_log*)tmp)->nb_pass;
         h_length = ((pass_auth_log*)tmp)->h_length;
         salt_length = ((pass_auth_log*)tmp)->salt_length;
         tmp = &((pass_auth_log*)tmp)->h_login;
@@ -166,6 +171,7 @@ void readPassAuthData (
             memcpy(*salt, tmp, salt_length);
     }
 
+    if (fd) close(fd);
     if (buffer) munmap(buffer, entry_size);
 }
 
@@ -179,17 +185,21 @@ void logCredsEntryData(
     unsigned long log_data_size = 0;
     unsigned long platform_length = 0, login_length = 0, pass_length = 0;
 
+    // Count space only for fields that will be present for sure (even if ==
+    // 0) in the structure
+    log_data_size = sizeof(unsigned long) * 3;
+
     if (platform != NULL) {
         platform_length = strlen(platform);
-        log_data_size += platform_length;
+        log_data_size += platform_length + 1;
     }
     if (login != NULL) {
         login_length = strlen(login);
-        log_data_size += login_length;
+        log_data_size += login_length + 1;
     }
     if (pass != NULL) {
         pass_length = strlen(pass);
-        log_data_size += pass_length;
+        log_data_size += pass_length + 1;
     }
 
     // Copy data
@@ -203,15 +213,15 @@ void logCredsEntryData(
 
     if (platform != NULL) {
         memcpy(tmp, platform, platform_length);
-        tmp += platform_length;
+        tmp += platform_length + 1;
     }
     if (login != NULL) {
         memcpy(tmp, login, login_length);
-        tmp += login_length;
+        tmp += login_length + 1;
     }
     if (pass != NULL) {
         memcpy(tmp, pass, pass_length);
-        tmp += pass_length;
+        tmp += pass_length + 1;
     }
 
 #ifdef PM_DEBUG_1
@@ -222,6 +232,41 @@ void logCredsEntryData(
     free(log_data);
 
     return;
+}
+
+void updateNbPass(char* filename, unsigned long new_nb)
+{
+    unsigned long log_type = 0, entry_size = 0;
+    unsigned long size_entry_header = sizeof(unsigned long) * 2;
+    void* buffer = NULL, *tmp = NULL;
+    int fd = 0;
+
+    // map the file into memory so we can retrieve data by accessing structure
+    // member
+    fd = open((const char*)filename, O_RDWR);
+    buffer = mmap(NULL, size_entry_header, PROT_READ, MAP_PRIVATE, fd, 0);
+    if ( MAP_FAILED == buffer )
+        return;
+
+    // read entry header informations
+    log_type = ((log_entry_header*)buffer)->logType;
+    entry_size = ((log_entry_header*)buffer)->entrySize;
+    munmap(buffer, size_entry_header);
+
+    // the first structure should always be an authentication one
+    if ( log_type == pass_auth_log_id ) {
+        // re-map with the full entry size (header + pass_auth_log)
+        // using MAP_SHARED so we can write to the file
+        buffer = mmap(NULL, entry_size, PROT_READ | PROT_WRITE , MAP_SHARED, fd, 0);
+        if ( !buffer )
+            return;
+
+        tmp = buffer + size_entry_header;
+        ((pass_auth_log*)tmp)->nb_pass = new_nb;
+    }
+
+    if (fd) close(fd);
+    if (buffer) munmap(buffer, entry_size);
 }
 
 /*

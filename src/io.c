@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <string.h>
 
 #include "io.h"
 #include "utils.h"
@@ -27,7 +28,7 @@ void io_menu(const char* user)
 {
     printf(
         "\nWelcome %s"
-        "========="
+        "\n========="
         "\n  1. Add a password"
         "\n  2. Delete a password"
         "\n  3. Edit a password"
@@ -61,7 +62,9 @@ char* io_get_string(unsigned short max_length)
     buffer = utils_malloc(max_length * sizeof(char));
 
     fgets(buffer, max_length, stdin);
-    buffer[max_length-1] = '\0';
+
+    // delete the new line char at the end
+    buffer[ strlen(buffer)-1 ] = '\0';
 
     return buffer;
 }
