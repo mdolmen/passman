@@ -15,8 +15,11 @@ typedef struct _log_entry_header {
 
 typedef struct _pass_auth_log {
     unsigned long nb_pass;
+    unsigned long entries_total_size;
     unsigned long h_length;
     unsigned long salt_length;
+    unsigned long iv_length;
+    unsigned char* iv;
     unsigned char* h_login;
     unsigned char* h_pass;
     unsigned char* salt;
@@ -44,6 +47,7 @@ void logPassAuthData (
     char* output,
     unsigned long h_length,
     unsigned long salt_length,
+    unsigned long iv_length,
     unsigned char* h_login,
     unsigned char* h_pass,
     unsigned char* salt);
@@ -54,6 +58,7 @@ void logPassAuthData (
  */
 void readPassAuthData (
     char* input,
+    unsigned char** iv,
     unsigned char** h_login,
     unsigned char** h_pass,
     unsigned char** salt,
@@ -79,8 +84,19 @@ void readCredsEntryData(
     char* pass);
 
 /*
- * Update the nbumber of password in the file output.
+ * Update a member of a pass_auth_data structure in the user's file.
  */
-void updateNbPass(char* output, unsigned long new_nb);
+void updateMemberInFile(
+    char* output,
+    field_t field,
+    unsigned long new_value);
+
+/*
+ * Update the IV in the user's file.
+ */
+void updateIVInFile(
+    char* filename,
+    unsigned char* iv,
+    size_t iv_size);
 
 #endif // LOGGER_H

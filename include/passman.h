@@ -15,10 +15,16 @@ typedef enum status {
     PM_FAILURE
 } status_t;
 
+typedef enum field {
+    F_NB_PASS,
+    F_ENTRIES_SIZE
+} field_t;
+
 typedef struct _pm_user {
     unsigned short auth;
     char db[PATH_MAX];
     unsigned long nb_pass;
+    unsigned char* iv;
     unsigned char* salt;
     char* login;
     char* pass;

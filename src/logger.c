@@ -55,6 +55,7 @@ void logPassAuthData (
     char* output,
     unsigned long h_length,
     unsigned long salt_length,
+    unsigned long iv_length,
     unsigned char* h_login,
     unsigned char* h_pass,
     unsigned char* salt)
@@ -64,7 +65,7 @@ void logPassAuthData (
 
     // Count space only for fields that will be present for sure (even if ==
     // 0) in the structure
-    log_data_size = sizeof(unsigned long) * 3;
+    log_data_size = sizeof(unsigned long) * 5 + iv_length;
 
     if (h_login != NULL) {
         log_data_size += h_length;
@@ -84,8 +85,13 @@ void logPassAuthData (
 
     ((pass_auth_log*)log_data)->h_length = h_length;
     ((pass_auth_log*)log_data)->salt_length = salt_length;
+    ((pass_auth_log*)log_data)->iv_length = iv_length;
 
-    tmp = (unsigned char*) &((pass_auth_log*)log_data)->h_login;
+    tmp = (unsigned char*) &((pass_auth_log*)log_data)->iv;
+
+    // init the IV to 0 to make room for it in the file
+    memset(tmp, '\0', iv_length);
+    tmp += iv_length;
 
     if (h_login != NULL) {
         memcpy(tmp, h_login, h_length);
@@ -112,6 +118,7 @@ void logPassAuthData (
 
 void readPassAuthData (
     char* input,
+    unsigned char** iv,
     unsigned char** h_login,
     unsigned char** h_pass,
     unsigned char** salt,
@@ -119,7 +126,7 @@ void readPassAuthData (
 {
     unsigned long log_type = 0, entry_size = 0;
     unsigned long size_entry_header = sizeof(unsigned long) * 2;
-    unsigned long h_length = 0, salt_length = 0;;
+    unsigned long h_length = 0, salt_length = 0, iv_length = 0;
     void* buffer = NULL, *tmp = NULL;
     int fd = 0;
 
@@ -149,7 +156,16 @@ void readPassAuthData (
         *nb_pass = ((pass_auth_log*)tmp)->nb_pass;
         h_length = ((pass_auth_log*)tmp)->h_length;
         salt_length = ((pass_auth_log*)tmp)->salt_length;
-        tmp = &((pass_auth_log*)tmp)->h_login;
+        iv_length = ((pass_auth_log*)tmp)->iv_length;
+
+        tmp = &((pass_auth_log*)tmp)->iv;
+
+        // read iv
+        *iv = utils_malloc((size_t)iv_length);
+        if (iv) {
+            memcpy(*iv, tmp, iv_length);
+            tmp += iv_length;
+        }
 
         // read hash login
         *h_login = utils_malloc((size_t)h_length);
@@ -227,6 +243,8 @@ void logCredsEntryData(
 #ifdef PM_DEBUG_1
     printf("(debug) log_data_size: %ld\n", log_data_size);
 #endif
+    
+    updateMemberInFile(output, F_ENTRIES_SIZE, log_data_size);
     logIntoFile(output, creds_entry_log_id, log_data, log_data_size);
 
     free(log_data);
@@ -234,7 +252,10 @@ void logCredsEntryData(
     return;
 }
 
-void updateNbPass(char* filename, unsigned long new_nb)
+void updateMemberInFile(
+    char* filename,
+    field_t field,
+    unsigned long new_value)
 {
     unsigned long log_type = 0, entry_size = 0;
     unsigned long size_entry_header = sizeof(unsigned long) * 2;
@@ -262,7 +283,57 @@ void updateNbPass(char* filename, unsigned long new_nb)
             return;
 
         tmp = buffer + size_entry_header;
-        ((pass_auth_log*)tmp)->nb_pass = new_nb;
+
+        switch (field) {
+            case F_NB_PASS:
+                ((pass_auth_log*)tmp)->nb_pass = new_value;
+                break;
+            case F_ENTRIES_SIZE:
+                ((pass_auth_log*)tmp)->entries_total_size += new_value;
+                break;
+            default:
+                break;
+        }
+    }
+
+    if (fd) close(fd);
+    if (buffer) munmap(buffer, entry_size);
+}
+
+void updateIVInFile(
+    char* filename,
+    unsigned char* iv,
+    size_t iv_size)
+{
+    unsigned long log_type = 0, entry_size = 0;
+    unsigned long size_entry_header = sizeof(unsigned long) * 2;
+    void* buffer = NULL, *tmp = NULL;
+    int fd = 0;
+
+    // map the file into memory so we can retrieve data by accessing structure
+    // member
+    fd = open((const char*)filename, O_RDWR);
+    buffer = mmap(NULL, size_entry_header, PROT_READ, MAP_PRIVATE, fd, 0);
+    if ( MAP_FAILED == buffer )
+        return;
+
+    // read entry header informations
+    log_type = ((log_entry_header*)buffer)->logType;
+    entry_size = ((log_entry_header*)buffer)->entrySize;
+    munmap(buffer, size_entry_header);
+
+    // the first structure should always be an authentication one
+    if ( log_type == pass_auth_log_id ) {
+        // re-map with the full entry size (header + pass_auth_log)
+        // using MAP_SHARED so we can write to the file
+        buffer = mmap(NULL, entry_size, PROT_READ | PROT_WRITE , MAP_SHARED, fd, 0);
+        if ( !buffer )
+            return;
+
+        tmp = buffer + size_entry_header;
+
+        tmp = &((pass_auth_log*)tmp)->iv;
+        memcpy(tmp, iv, iv_size);
     }
 
     if (fd) close(fd);

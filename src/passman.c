@@ -60,7 +60,7 @@ status_t pm_login(pm_user* user, unsigned short method)
                 if (DT_REG == entry->d_type) {
                     // read data from binary file
                     snprintf(input, PATH_MAX, "data/%s", entry->d_name);
-                    readPassAuthData( input, &h_login, &h_pass, &(user->salt), &user->nb_pass );
+                    readPassAuthData( input, &user->iv, &h_login, &h_pass, &(user->salt), &user->nb_pass );
 
                     // compare
                     if (h_login && h_pass) {
@@ -78,6 +78,7 @@ status_t pm_login(pm_user* user, unsigned short method)
                         FREE(h_login);
                         FREE(h_pass);
                         if ( !user->auth ) {
+                            FREE(user->iv);
                             FREE(user->salt);
                             FREE(user->login);
                             FREE(user->pass);
@@ -164,13 +165,23 @@ status_t pm_create_user(pm_user* user, unsigned short method)
 
         // write data to a new file
         snprintf(new_file, PATH_MAX, "data/%ld.pm", id);
-        logPassAuthData(new_file, (unsigned long)crypto_hash_BYTES, SALT_SIZE, h_login, h_pass, salt);
+        logPassAuthData(
+            new_file,
+            (unsigned long)crypto_hash_BYTES,
+            SALT_SIZE,
+            (unsigned long)crypto_stream_NONCEBYTES,
+            h_login,
+            h_pass,
+            salt
+        );
     }
     else {
         // TODO : take user input (login + key path)
     }
 
 exit:
+    FREE(user->login);
+    FREE(user->pass);
     FREE(tmp);
 
     return status;
@@ -203,7 +214,7 @@ status_t pm_add_password(pm_user* user)
     }
 
     logCredsEntryData(user->db, platform, login, pass);
-    updateNbPass(user->db, user->nb_pass + 1);
+    updateMemberInFile(user->db, F_NB_PASS, user->nb_pass + 1);
 
     FREE(platform);
     FREE(login);
@@ -285,10 +296,11 @@ status_t pm_encrypt_data(pm_user* user)
     putchar('\n');
 #endif
 
-    // generate initialization vector
+    // generate initialization vector and store it in file
     randombytes(iv, crypto_stream_NONCEBYTES);
 
     // TODO : write the iv into the file
+    updateIVInFile(user->db, iv, crypto_stream_NONCEBYTES);
 
     //crypto_stream_xor();
 
@@ -364,6 +376,7 @@ int main(void)
 
 exit:
     // Free resources.
+    FREE(user->iv);
     FREE(user->salt);
     FREE(user->login);
     FREE(user->pass);
