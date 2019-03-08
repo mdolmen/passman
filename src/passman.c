@@ -7,6 +7,7 @@
 
 #include <crypto_hash.h>
 #include <crypto_verify_32.h>
+#include <crypto_stream.h>
 #include <randombytes.h>
 
 #include "passman.h"
@@ -148,11 +149,11 @@ status_t pm_create_user(pm_user* user, unsigned short method)
         }
 
 #ifdef PM_DEBUG_1
-        printf("(debug) login: %s", user->login);
+        printf("(debug) login: %s\n", user->login);
         for (int i = 0; i < crypto_hash_BYTES; i++) {
             printf("%02x", h_login[i]);
         }
-        printf("(debug) pass: %s", user->pass);
+        printf("\n(debug) pass: %s\n", user->pass);
         for (int i = 0; i < crypto_hash_BYTES; i++) {
             printf("%02x", h_pass[i]);
         }
@@ -244,6 +245,59 @@ status_t pm_delete_all()
     return PM_SUCCESS;
 }
 
+/*
+ * Encrypt the data of the user database except for the structure containing
+ * user information needed to authenticate.
+ */
+status_t pm_encrypt_data(pm_user* user)
+{
+    status_t status = PM_SUCCESS;
+
+    // cryto_hash_BYTES = 32 for sha512 which is used by default by nacl
+    unsigned char key[crypto_hash_BYTES] = { '\0' };
+    unsigned char iv[crypto_stream_NONCEBYTES] = { '\0' };
+    unsigned char* buffer = NULL;
+    size_t buffer_size = 0, pass_size = 0;
+
+    // TODO : get a pointer to the file content at the offset where entries
+    // start
+
+    // generate a key based on password and salt
+    printf("pass: %s\n", user->pass);
+    pass_size = strlen(user->pass);
+    buffer_size = pass_size + SALT_SIZE;
+    buffer = utils_malloc((size_t)buffer_size);
+
+    memcpy(buffer, user->pass, pass_size);
+    memcpy(buffer+pass_size, user->salt, SALT_SIZE);
+
+    if ( crypto_hash(key, (const unsigned char*)buffer, buffer_size) != 0 ) {
+        perror("crypto_hash");
+        status = PM_FAILURE;
+        goto exit;
+    }
+
+#ifdef PM_DEBUG_1
+    printf("(debug) key: ");
+    for (int i = 0; i < crypto_hash_BYTES; i++) {
+        printf("%02x", key[i]);
+    }
+    putchar('\n');
+#endif
+
+    // generate initialization vector
+    randombytes(iv, crypto_stream_NONCEBYTES);
+
+    // TODO : write the iv into the file
+
+    //crypto_stream_xor();
+
+exit:
+    FREE(buffer);
+
+    return status;
+}
+
 int main(void)
 {
     unsigned short choice = 0;
@@ -282,7 +336,9 @@ int main(void)
 
     io_menu((const char*)user->login);
 
-    while ( (choice = io_get_choice()) != 6 ) {
+    while (1) {
+        choice = io_get_choice();
+
         switch (choice) {
             case 1:
                 pm_add_password(user);
@@ -297,6 +353,8 @@ int main(void)
                 break;
             case 6:
                 // TODO : seal and exit
+                puts("[+] Encrypting your data..");
+                pm_encrypt_data(user);
                 goto exit;
             default:
                 puts("Invalid choice!");
