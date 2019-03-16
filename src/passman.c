@@ -252,7 +252,7 @@ status_t pm_print_all(log_info* log_buffer, pm_user* user)
     creds_entry_log* entry = NULL;
     unsigned long log_type = 0, entry_size = 0;
     unsigned long platform_length = 0, login_length = 0, pass_length = 0;
-    unsigned char* tmp = NULL;
+    char* tmp = NULL;
 
     if ( !log_buffer->buf )
         return 0;
@@ -273,15 +273,16 @@ status_t pm_print_all(log_info* log_buffer, pm_user* user)
             login_length = entry->login_length;
             pass_length = entry->pass_length;
 
-            tmp = entry->platform;
+            // TODO : fix printing
+            tmp = (char*)entry->platform;
 
-            printf("\tPlatform: %s\n", (char*)entry);
+            printf("\tPlatform: %s\n", tmp);
             tmp += platform_length;
 
-            printf("\tLogin: %s\n", (char*)entry);
+            printf("\tLogin: %s\n", tmp);
             tmp += login_length;
 
-            printf("\tPassword: %s\n", (char*)entry);
+            printf("\tPassword: %s\n", tmp);
             tmp += pass_length;
         }
 
@@ -426,9 +427,21 @@ int main(void)
     // At this point the user is authenticated.
 
     // get start address of passwords entries and decrypt user's passwords
-    log_buffer.buf = readCredsEntryData(user->db);
+    readCredsEntryData(&log_buffer, user->db);
+#ifdef PM_DEBUG_1
+    printf("(debug) enc: ");
+    for (int i = 0; i < 50; i++) {
+        printf("%02x", log_buffer.buf[i]);
+    }
+#endif
     tmp = pm_decrypt_data(&log_buffer, user);
-    FREE(log_buffer.buf);
+#ifdef PM_DEBUG_1
+    printf("\n(debug) tmp: ");
+    for (int i = 0; i < 50; i++) {
+        printf("%02x", tmp[i]);
+    }
+#endif
+    //FREE(log_buffer.buf);
     log_buffer.buf = tmp;
 
     io_menu((const char*)user->login);
@@ -451,8 +464,12 @@ int main(void)
                 break;
             case 6:
                 // TODO : seal and exit
+                
                 puts("[+] Encrypting your data..");
                 
+                // TODO : make sure we are replacing the previous data instead
+                // of appending at the end
+
                 tmp = pm_encrypt_data(&log_buffer, user);
 
                 // replace data in buffer by the encrypted version

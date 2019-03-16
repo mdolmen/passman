@@ -51,8 +51,8 @@ void flushToFile(log_info* log_buffer, char* output)
 }
 
 void logIntoBuf(
+    unsigned short add_header,
     log_info* log_buffer,
-    char* output,
     log_identifier type,
     unsigned char* data,
     unsigned long dataSize)
@@ -61,7 +61,7 @@ void logIntoBuf(
 
     dataNeeded = dataSize + sizeof(log_entry_header);
 
-    if ( !data || !output )
+    if ( !data )
         return;
 
     // Is there still place in the current buffer?
@@ -74,12 +74,23 @@ void logIntoBuf(
         log_buffer->ptr = log_buffer->buf + log_buffer->size;
     }
 
-    // Log into the buffer
-    ((log_entry_header*)log_buffer->ptr)->logType = (unsigned long)type;
-    ((log_entry_header*)log_buffer->ptr)->entrySize = dataNeeded;
-    memcpy(log_buffer->ptr + sizeof(log_entry_header), data, dataSize);
+    // add a header if this is going to be new data to add to the DB
+    if ( add_header ) {
+        // Log into the buffer
+        ((log_entry_header*)log_buffer->ptr)->logType = (unsigned long)type;
+        ((log_entry_header*)log_buffer->ptr)->entrySize = dataNeeded;
+        memcpy(log_buffer->ptr + sizeof(log_entry_header), data, dataSize);
 
-    log_buffer->size += dataNeeded;
+        log_buffer->size += dataNeeded;
+    }
+    // otherwise it means the data are coming from a file and we just want to
+    // load our buffer with it
+    else {
+        memcpy(log_buffer->ptr, data, dataSize);
+
+        log_buffer->size += dataSize;
+    }
+
 
     return;
 }
@@ -143,7 +154,7 @@ void logPassAuthData (
 #ifdef PM_DEBUG_1
     printf("(debug) log_data_size: %ld\n", log_data_size);
 #endif
-    logIntoBuf(log_buffer, output, pass_auth_log_id, log_data, log_data_size);
+    logIntoBuf(1, log_buffer, pass_auth_log_id, log_data, log_data_size);
     flushToFile(log_buffer, output);
     //logIntoFile(output, pass_auth_log_id, log_data, log_data_size);
 
@@ -285,9 +296,7 @@ void logCredsEntryData(
     
     updateMemberInFile(output, F_ENTRIES_SIZE, log_data_size);
 
-    // TODO : replace by logIntoBuf()
-    logIntoBuf(log_buffer, output, creds_entry_log_id, log_data, log_data_size);
-    //logIntoFile(output, creds_entry_log_id, log_data, log_data_size);
+    logIntoBuf(1, log_buffer, creds_entry_log_id, log_data, log_data_size);
 
     free(log_data);
 
@@ -386,13 +395,14 @@ void updateIVInFile(
 /*
  * Return a pointer to the first structure corresponding to a password entry.
  */
-void* readCredsEntryData(
+void readCredsEntryData(
+    log_info* log_buffer,
     char* input)
 {
     struct stat statbuf;
     unsigned long log_type = 0, entry_size = 0;
     unsigned long size_entry_header = sizeof(unsigned long) * 2;
-    unsigned long platform_length = 0, login_length = 0, pass_length = 0;
+    //unsigned long platform_length = 0, login_length = 0, pass_length = 0;
     void* first_entry = NULL;
     int fd = 0, status = 0;
 
@@ -416,6 +426,7 @@ void* readCredsEntryData(
 
     // the first structure should always be an authentication one
     if ( log_type == pass_auth_log_id ) {
+        printf("file_size = %ld\n", file_size);
 
         // re-map with the full file size
         file_start = mmap(NULL, file_size, PROT_READ, MAP_PRIVATE, fd, 0);
@@ -424,11 +435,12 @@ void* readCredsEntryData(
 
         // skip the first structure to get to the password entries
         first_entry = file_start + entry_size;
+
+        logIntoBuf(0, log_buffer, creds_entry_log_id, first_entry, file_size - entry_size);
     }
+
     if (file_start)
         munmap(file_start, file_size);
-
-    return first_entry;
 }
 
 /*

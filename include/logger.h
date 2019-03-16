@@ -35,8 +35,8 @@ typedef struct _creds_entry_log {
 } creds_entry_log;
 
 void logIntoBuf(
+    unsigned short add_header,
     log_info* log_buffer,
-    char* output,
     log_identifier type,
     unsigned char* data,
     unsigned long dataSize);
@@ -85,7 +85,7 @@ void logCredsEntryData(
  * Read credentials detail from a file.
  * Set parameters to those details.
  */
-void* readCredsEntryData(char* input);
+void readCredsEntryData(log_info* log_buffer, char* input);
 
 /*
  * Update a member of a pass_auth_data structure in the user's file.
