@@ -14,44 +14,78 @@
 #include "logger.h"
 #include "utils.h"
 
-void logIntoFile(char* output, log_identifier type, unsigned char* data, unsigned long dataSize)
+/*
+ * We keep track of the pointer to the start of the file and the size of the
+ * whole file to unmap the memory region later.
+ */
+void* file_start = NULL;
+unsigned long file_size = 0;
+
+void flushToFile(log_info* log_buffer, char* output)
 {
     FILE* fHandle = NULL;
-    char* logBuffer = NULL;
-    unsigned long logBufferSize = 0;
-
-    if ( !data || !output )
-        return;
+    //unsigned char* data_enc = NULL;
 
     fHandle = fopen(output, "ab");
     if ( !fHandle )
         return;
 
-    logBufferSize = dataSize + sizeof(log_entry_header);
-
-    logBuffer = utils_malloc((size_t)logBufferSize);
-
-    // Log into the buffer
-    ((log_entry_header*)logBuffer)->logType = (unsigned long)type;
-    ((log_entry_header*)logBuffer)->entrySize = logBufferSize;
-    memcpy(logBuffer + sizeof(log_entry_header), data, dataSize);
+    // Encrypt the data before writing to disk
+    //data_enc = pm_encrypt_data(output, logBuffer, logBufferSize);
 
 #ifdef PM_DEBUG_1
     puts("(debug) Writing to disk..");
 #endif
 
     // Write on disk
-    fwrite(logBuffer, logBufferSize, sizeof(char), fHandle);
+    fwrite(log_buffer->buf, log_buffer->size, sizeof(char), fHandle);
     fclose(fHandle);
     
-    if ( logBuffer ) {
-        free(logBuffer); logBuffer = NULL;
+    log_buffer->ptr = NULL;
+    log_buffer->size = 0;
+
+    FREE(log_buffer->buf);
+    //FREE(data_enc);
+
+    return;
+}
+
+void logIntoBuf(
+    log_info* log_buffer,
+    char* output,
+    log_identifier type,
+    unsigned char* data,
+    unsigned long dataSize)
+{
+    unsigned long dataNeeded = 0;
+
+    dataNeeded = dataSize + sizeof(log_entry_header);
+
+    if ( !data || !output )
+        return;
+
+    // Is there still place in the current buffer?
+    if ( log_buffer->buf == NULL ) {
+        log_buffer->buf = utils_malloc((size_t)dataNeeded);
+        log_buffer->ptr = log_buffer->buf;
     }
+    else {
+        log_buffer->buf = utils_realloc(log_buffer->buf, (size_t)log_buffer->size + dataNeeded);
+        log_buffer->ptr = log_buffer->buf + log_buffer->size;
+    }
+
+    // Log into the buffer
+    ((log_entry_header*)log_buffer->ptr)->logType = (unsigned long)type;
+    ((log_entry_header*)log_buffer->ptr)->entrySize = dataNeeded;
+    memcpy(log_buffer->ptr + sizeof(log_entry_header), data, dataSize);
+
+    log_buffer->size += dataNeeded;
 
     return;
 }
 
 void logPassAuthData (
+    log_info* log_buffer,
     char* output,
     unsigned long h_length,
     unsigned long salt_length,
@@ -109,7 +143,9 @@ void logPassAuthData (
 #ifdef PM_DEBUG_1
     printf("(debug) log_data_size: %ld\n", log_data_size);
 #endif
-    logIntoFile(output, pass_auth_log_id, log_data, log_data_size);
+    logIntoBuf(log_buffer, output, pass_auth_log_id, log_data, log_data_size);
+    flushToFile(log_buffer, output);
+    //logIntoFile(output, pass_auth_log_id, log_data, log_data_size);
 
     free(log_data);
 
@@ -122,7 +158,8 @@ void readPassAuthData (
     unsigned char** h_login,
     unsigned char** h_pass,
     unsigned char** salt,
-    unsigned long* nb_pass)
+    unsigned long* nb_pass,
+    unsigned long* entries_total_size)
 {
     unsigned long log_type = 0, entry_size = 0;
     unsigned long size_entry_header = sizeof(unsigned long) * 2;
@@ -154,6 +191,7 @@ void readPassAuthData (
         tmp = buffer + size_entry_header;
 
         *nb_pass = ((pass_auth_log*)tmp)->nb_pass;
+        *entries_total_size = ((pass_auth_log*)tmp)->entries_total_size;
         h_length = ((pass_auth_log*)tmp)->h_length;
         salt_length = ((pass_auth_log*)tmp)->salt_length;
         iv_length = ((pass_auth_log*)tmp)->iv_length;
@@ -192,6 +230,7 @@ void readPassAuthData (
 }
 
 void logCredsEntryData(
+    log_info* log_buffer,
     char* output,
     char* platform,
     char* login,
@@ -245,7 +284,10 @@ void logCredsEntryData(
 #endif
     
     updateMemberInFile(output, F_ENTRIES_SIZE, log_data_size);
-    logIntoFile(output, creds_entry_log_id, log_data, log_data_size);
+
+    // TODO : replace by logIntoBuf()
+    logIntoBuf(log_buffer, output, creds_entry_log_id, log_data, log_data_size);
+    //logIntoFile(output, creds_entry_log_id, log_data, log_data_size);
 
     free(log_data);
 
@@ -289,7 +331,8 @@ void updateMemberInFile(
                 ((pass_auth_log*)tmp)->nb_pass = new_value;
                 break;
             case F_ENTRIES_SIZE:
-                ((pass_auth_log*)tmp)->entries_total_size += new_value;
+                // each structure start by a struct header so add this size too
+                ((pass_auth_log*)tmp)->entries_total_size += new_value + size_entry_header;
                 break;
             default:
                 break;
@@ -341,65 +384,57 @@ void updateIVInFile(
 }
 
 /*
-void readCredsEntryData(
-    char* input,
-    char** platform,
-    char** login,
-    char** pass)
+ * Return a pointer to the first structure corresponding to a password entry.
+ */
+void* readCredsEntryData(
+    char* input)
 {
+    struct stat statbuf;
     unsigned long log_type = 0, entry_size = 0;
     unsigned long size_entry_header = sizeof(unsigned long) * 2;
     unsigned long platform_length = 0, login_length = 0, pass_length = 0;
-    void* buffer = NULL, *tmp = NULL;
-    int fd = 0;
+    void* first_entry = NULL;
+    int fd = 0, status = 0;
 
     // map the file into memory so we can retrieve data by accessing structure
     // member
     fd = open((const char*)input, O_RDONLY);
-    buffer = mmap(NULL, size_entry_header, PROT_READ, MAP_PRIVATE, fd, 0);
-    if ( MAP_FAILED == buffer )
-        return;
+    file_start = mmap(NULL, size_entry_header, PROT_READ, MAP_PRIVATE, fd, 0);
+    if ( MAP_FAILED == file_start )
+        return NULL;
 
     // read entry header informations
-    log_type = ((log_entry_header*)buffer)->logType;
-    entry_size = ((log_entry_header*)buffer)->entrySize;
-    munmap(buffer, size_entry_header);
+    log_type = ((log_entry_header*)file_start)->logType;
+    entry_size = ((log_entry_header*)file_start)->entrySize;
+    munmap(file_start, size_entry_header);
+
+    // get file size
+    status = stat(input, &statbuf);
+    if (status != 0)
+        return NULL;
+    file_size = statbuf.st_size;
 
     // the first structure should always be an authentication one
     if ( log_type == pass_auth_log_id ) {
-        // re-map with the full entry size (header + pass_auth_log)
-        buffer = mmap(NULL, entry_size, PROT_READ, MAP_PRIVATE, fd, 0);
-        if ( !buffer )
-            return;
 
-        // need for an intermediate pointer so we can free the whole mapped
-        // memory afterwards
-        tmp = buffer + size_entry_header;
+        // re-map with the full file size
+        file_start = mmap(NULL, file_size, PROT_READ, MAP_PRIVATE, fd, 0);
+        if ( !file_start )
+            return NULL;
 
-        h_length = ((pass_auth_log*)tmp)->h_length;
-        salt_length = ((pass_auth_log*)tmp)->salt_length;
-        tmp = &((pass_auth_log*)tmp)->h_login;
-
-        // read hash login
-        *h_login = utils_malloc((size_t)h_length);
-        if (h_login) {
-            memcpy(*h_login, tmp, h_length);
-            tmp += h_length;
-        }
-
-        // read hash password
-        *h_pass = utils_malloc((size_t)h_length);
-        if (h_pass) {
-            memcpy(*h_pass, tmp, h_length);
-            tmp += h_length;
-        }
-
-        // read salt
-        *salt = utils_malloc((size_t)salt_length);
-        if (salt)
-            memcpy(*salt, tmp, salt_length);
+        // skip the first structure to get to the password entries
+        first_entry = file_start + entry_size;
     }
+    if (file_start)
+        munmap(file_start, file_size);
 
-    if (buffer) munmap(buffer, entry_size);
+    return first_entry;
+}
+
+/*
+void unmapFile()
+{
+    if (file_start)
+        munmap(file_start, file_size);
 }
 */

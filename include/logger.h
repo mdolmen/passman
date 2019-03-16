@@ -34,16 +34,22 @@ typedef struct _creds_entry_log {
     unsigned char* pass;
 } creds_entry_log;
 
-void logIntoFile(
+void logIntoBuf(
+    log_info* log_buffer,
     char* output,
     log_identifier type,
     unsigned char* data,
     unsigned long dataSize);
 
 /*
+ */
+void flushToFile(log_info* log_buffer, char* output);
+
+/*
  * Log authentication details to a file.
  */
 void logPassAuthData (
+    log_info* log_buffer,
     char* output,
     unsigned long h_length,
     unsigned long salt_length,
@@ -62,12 +68,14 @@ void readPassAuthData (
     unsigned char** h_login,
     unsigned char** h_pass,
     unsigned char** salt,
-    unsigned long* nb_pass);
+    unsigned long* nb_pass,
+    unsigned long* entries_total_size);
 
 /*
  * Log credentials for a given platform (website, app, etc.).
  */
 void logCredsEntryData(
+    log_info* log_buffer,
     char* output,
     char* platform,
     char* login,
@@ -77,11 +85,7 @@ void logCredsEntryData(
  * Read credentials detail from a file.
  * Set parameters to those details.
  */
-void readCredsEntryData(
-    char* input,
-    char* platform,
-    char* login,
-    char* pass);
+void* readCredsEntryData(char* input);
 
 /*
  * Update a member of a pass_auth_data structure in the user's file.
