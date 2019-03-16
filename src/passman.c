@@ -96,8 +96,6 @@ status_t pm_login(pm_user* user, unsigned short method)
         // TODO : take user input (login + key path)
     }
 
-    // TODO : if (auth) pm_decrypt_data(user, ...)
-
 exit:
     FREE(h_login);
     FREE(h_pass);
@@ -249,8 +247,48 @@ status_t pm_edit_password()
 /*
  * Print all registered password of the user.
  */
-status_t pm_print_all()
+status_t pm_print_all(log_info* log_buffer, pm_user* user)
 {
+    creds_entry_log* entry = NULL;
+    unsigned long log_type = 0, entry_size = 0;
+    unsigned long platform_length = 0, login_length = 0, pass_length = 0;
+    unsigned char* tmp = NULL;
+
+    if ( !log_buffer->buf )
+        return 0;
+
+    printf("All your passwords (%ld) :\n", user->nb_pass);
+
+    entry = (creds_entry_log*)log_buffer->buf;
+    printf("entry = %p\n", entry);
+
+    for (unsigned long i = 0; i < user->nb_pass; i++) {
+        log_type = ((log_entry_header*)entry)->logType;
+        entry_size = ((log_entry_header*)entry)->entrySize;
+
+        printf("log_type = %ld\n", log_type);
+
+        if (log_type == creds_entry_log_id) {
+            platform_length = entry->platform_length;
+            login_length = entry->login_length;
+            pass_length = entry->pass_length;
+
+            tmp = entry->platform;
+
+            printf("\tPlatform: %s\n", (char*)entry);
+            tmp += platform_length;
+
+            printf("\tLogin: %s\n", (char*)entry);
+            tmp += login_length;
+
+            printf("\tPassword: %s\n", (char*)entry);
+            tmp += pass_length;
+        }
+
+        // got to the next structure
+        entry += entry_size;
+    }
+    
     return PM_SUCCESS;
 }
 
@@ -275,7 +313,6 @@ unsigned char* pm_encrypt_data(
     unsigned char iv[crypto_stream_NONCEBYTES] = { '\0' };
     unsigned char* buffer = NULL, *data_enc = NULL;
     size_t buffer_size = 0, pass_size = 0;
-    void* first_entry = NULL;
 
     // generate a key based on password and salt
     pass_size = strlen(user->pass);
@@ -313,8 +350,43 @@ exit:
     return data_enc;
 }
 
+/*
+ * Decrypt the encrypted data of the user database.
+ */
+unsigned char* pm_decrypt_data(
+    log_info* log_buffer,
+    pm_user* user)
+{
+    // cryto_hash_BYTES = 32 for sha512 which is used by default by nacl
+    unsigned char key[crypto_hash_BYTES] = { '\0' };
+    unsigned char* buffer = NULL, *data_dec = NULL;
+    size_t buffer_size = 0, pass_size = 0;
+
+    // generate a key based on password and salt
+    pass_size = strlen(user->pass);
+    buffer_size = pass_size + SALT_SIZE;
+    buffer = utils_malloc(buffer_size);
+
+    memcpy(buffer, user->pass, pass_size);
+    memcpy(buffer+pass_size, user->salt, SALT_SIZE);
+
+    if ( crypto_hash(key, (const unsigned char*)buffer, buffer_size) != 0 ) {
+        perror("crypto_hash");
+        goto exit;
+    }
+
+    data_dec = utils_malloc(log_buffer->size);
+    crypto_stream_xor(data_dec, log_buffer->buf, log_buffer->size, user->iv, key);
+
+exit:
+    FREE(buffer);
+
+    return data_dec;
+}
+
 int main(void)
 {
+    unsigned char* tmp = NULL;
     unsigned short choice = 0;
     pm_user* user = NULL;
     log_info log_buffer;
@@ -334,7 +406,7 @@ int main(void)
         switch (choice) {
             case 1:
                 pm_login(user, LOGIN_PASS);
-                // TODO : add sleep to slow down bruteforce
+                //sleep(1);
                 break;
             case 2:
                 // TODO : login with key
@@ -352,7 +424,12 @@ int main(void)
     }
 
     // At this point the user is authenticated.
-    // TODO : decrypt rest of the file here
+
+    // get start address of passwords entries and decrypt user's passwords
+    log_buffer.buf = readCredsEntryData(user->db);
+    tmp = pm_decrypt_data(&log_buffer, user);
+    FREE(log_buffer.buf);
+    log_buffer.buf = tmp;
 
     io_menu((const char*)user->login);
 
@@ -368,6 +445,7 @@ int main(void)
             case 3:
                 break;
             case 4:
+                pm_print_all(&log_buffer, user);
                 break;
             case 5:
                 break;
@@ -375,9 +453,12 @@ int main(void)
                 // TODO : seal and exit
                 puts("[+] Encrypting your data..");
                 
+                tmp = pm_encrypt_data(&log_buffer, user);
+
                 // replace data in buffer by the encrypted version
                 FREE(log_buffer.buf)
-                log_buffer.buf = pm_encrypt_data(&log_buffer, user);
+                log_buffer.buf = tmp;
+
                 flushToFile(&log_buffer, user->db);
 
                 goto exit;
