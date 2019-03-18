@@ -4,6 +4,7 @@
 #include <linux/limits.h>
 #include <sys/types.h>
 #include <dirent.h>
+#include <signal.h>
 
 #include <crypto_hash.h>
 #include <crypto_verify_32.h>
@@ -14,6 +15,13 @@
 #include "io.h"
 #include "logger.h"
 #include "utils.h"
+
+static volatile short is_running = 1;
+
+void sigint_handler(int signum)
+{
+    is_running = 0;
+}
 
 /*
  * Allows a user to connect and open up his file.
@@ -218,7 +226,8 @@ status_t pm_add_password(log_info* log_buffer, pm_user* user)
     }
 
     logCredsEntryData(log_buffer, user->db, platform, login, pass);
-    updateMemberInFile(user->db, F_NB_PASS, user->nb_pass + 1);
+    user->nb_pass += 1;
+    updateMemberInFile(user->db, F_NB_PASS, user->nb_pass);
 
     FREE(platform);
     FREE(login);
@@ -245,49 +254,49 @@ status_t pm_edit_password()
 }
 
 /*
- * Print all registered password of the user.
+ * Print all registered passwords of the user.
  */
 status_t pm_print_all(log_info* log_buffer, pm_user* user)
 {
+    log_entry_header* header = NULL;
     creds_entry_log* entry = NULL;
-    unsigned long log_type = 0, entry_size = 0;
+    unsigned long log_type = 0;
     unsigned long platform_length = 0, login_length = 0, pass_length = 0;
     char* tmp = NULL;
 
     if ( !log_buffer->buf )
-        return 0;
+        return PM_FAILURE;
 
-    printf("All your passwords (%ld) :\n", user->nb_pass);
+    printf("\nAll your passwords (%ld) :\n\n", user->nb_pass);
 
-    entry = (creds_entry_log*)log_buffer->buf;
-    printf("entry = %p\n", entry);
+    header = (log_entry_header*)log_buffer->buf;
+    entry = (creds_entry_log*)(log_buffer->buf + sizeof(log_entry_header));
 
+    // go through the structures containing passwords
     for (unsigned long i = 0; i < user->nb_pass; i++) {
-        log_type = ((log_entry_header*)entry)->logType;
-        entry_size = ((log_entry_header*)entry)->entrySize;
-
-        printf("log_type = %ld\n", log_type);
+        log_type = header->logType;
 
         if (log_type == creds_entry_log_id) {
             platform_length = entry->platform_length;
             login_length = entry->login_length;
             pass_length = entry->pass_length;
 
-            // TODO : fix printing
-            tmp = (char*)entry->platform;
+            tmp = (char*) &entry->platform;
 
             printf("\tPlatform: %s\n", tmp);
-            tmp += platform_length;
+            tmp += platform_length + 1;
 
             printf("\tLogin: %s\n", tmp);
-            tmp += login_length;
+            tmp += login_length + 1;
 
             printf("\tPassword: %s\n", tmp);
-            tmp += pass_length;
+            tmp += pass_length + 1;
         }
+        puts("\t--------------------");
 
-        // got to the next structure
-        entry += entry_size;
+        // update pointers to point to the next structure
+        header = (log_entry_header*) tmp;
+        entry = (creds_entry_log*) (tmp + sizeof(log_entry_header));
     }
     
     return PM_SUCCESS;
@@ -376,8 +385,10 @@ unsigned char* pm_decrypt_data(
         goto exit;
     }
 
-    data_dec = utils_malloc(log_buffer->size);
-    crypto_stream_xor(data_dec, log_buffer->buf, log_buffer->size, user->iv, key);
+    if ( log_buffer->size > 0 ) {
+        data_dec = utils_malloc(log_buffer->size);
+        crypto_stream_xor(data_dec, log_buffer->buf, log_buffer->size, user->iv, key);
+    }
 
 exit:
     FREE(buffer);
@@ -426,27 +437,34 @@ int main(void)
 
     // At this point the user is authenticated.
 
+    // TODO : segfault when create user -> login as another one
+
     // get start address of passwords entries and decrypt user's passwords
     readCredsEntryData(&log_buffer, user->db);
-#ifdef PM_DEBUG_1
-    printf("(debug) enc: ");
-    for (int i = 0; i < 50; i++) {
-        printf("%02x", log_buffer.buf[i]);
-    }
-#endif
     tmp = pm_decrypt_data(&log_buffer, user);
+
 #ifdef PM_DEBUG_1
-    printf("\n(debug) tmp: ");
-    for (int i = 0; i < 50; i++) {
-        printf("%02x", tmp[i]);
+    if ( log_buffer.buf ) {
+        printf("(debug) enc: ");
+        for (int i = 0; i < 50; i++) {
+            printf("%02x", log_buffer.buf[i]);
+        }
+
+        printf("\n(debug) tmp: ");
+        for (int i = 0; i < 50; i++) {
+            printf("%02x", tmp[i]);
+        }
+        putchar('\n');
     }
 #endif
-    //FREE(log_buffer.buf);
+
+    FREE(log_buffer.buf);
     log_buffer.buf = tmp;
 
     io_menu((const char*)user->login);
+    signal(SIGINT, sigint_handler);
 
-    while (1) {
+    while ( is_running ) {
         choice = io_get_choice();
 
         switch (choice) {
@@ -463,27 +481,23 @@ int main(void)
             case 5:
                 break;
             case 6:
-                // TODO : seal and exit
-                
-                puts("[+] Encrypting your data..");
-                
-                // TODO : make sure we are replacing the previous data instead
-                // of appending at the end
-
-                tmp = pm_encrypt_data(&log_buffer, user);
-
-                // replace data in buffer by the encrypted version
-                FREE(log_buffer.buf)
-                log_buffer.buf = tmp;
-
-                flushToFile(&log_buffer, user->db);
-
-                goto exit;
+                is_running = 0;
+                break;
             default:
                 puts("Invalid choice!");
                 break;
         }
     }
+
+    // seal and exit
+    puts("[+] Encrypting your data..");
+    tmp = pm_encrypt_data(&log_buffer, user);
+
+    // replace data in buffer by the encrypted version
+    FREE(log_buffer.buf)
+    log_buffer.buf = tmp;
+
+    flushToFile(&log_buffer, user->db);
 
 exit:
     // Free resources.

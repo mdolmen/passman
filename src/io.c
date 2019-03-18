@@ -19,7 +19,7 @@ void io_menu_login()
         "Menu"
         "\n===="
         "\n  1. Login with password"
-        "\n  2. Login with key"
+        "\n  2. Login with key (TODO)"
         "\n  3. Create user"
         "\n  4. Quit\n");
 }
@@ -30,11 +30,11 @@ void io_menu(const char* user)
         "\nWelcome %s"
         "\n========="
         "\n  1. Add a password"
-        "\n  2. Delete a password"
-        "\n  3. Edit a password"
+        "\n  2. Delete a password (TODO)"
+        "\n  3. Edit a password (TODO)"
         "\n  4. Display all my passwords"
-        "\n  5. Delete all my passwords"
-        "\n  6. Quit\n",
+        "\n  5. Delete all my passwords (TODO)"
+        "\n  6. Seal and exit\n",
         user);
 }
 

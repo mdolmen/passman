@@ -14,6 +14,7 @@
 #include "logger.h"
 #include "utils.h"
 
+// TODO : replace this in a function?
 /*
  * We keep track of the pointer to the start of the file and the size of the
  * whole file to unmap the memory region later.
@@ -59,10 +60,13 @@ void logIntoBuf(
 {
     unsigned long dataNeeded = 0;
 
-    dataNeeded = dataSize + sizeof(log_entry_header);
-
-    if ( !data )
+    if ( !data || !dataSize )
         return;
+
+    dataNeeded += dataSize;
+
+    if ( add_header )
+        dataNeeded += sizeof(log_entry_header);
 
     // Is there still place in the current buffer?
     if ( log_buffer->buf == NULL ) {
@@ -400,28 +404,26 @@ void readCredsEntryData(
     char* input)
 {
     struct stat statbuf;
-    unsigned long log_type = 0, entry_size = 0;
-    unsigned long size_entry_header = sizeof(unsigned long) * 2;
-    //unsigned long platform_length = 0, login_length = 0, pass_length = 0;
+    unsigned long log_type = 0, auth_entry_size = 0;
     void* first_entry = NULL;
     int fd = 0, status = 0;
 
     // map the file into memory so we can retrieve data by accessing structure
     // member
-    fd = open((const char*)input, O_RDONLY);
-    file_start = mmap(NULL, size_entry_header, PROT_READ, MAP_PRIVATE, fd, 0);
+    fd = open((const char*)input, O_RDWR);
+    file_start = mmap(NULL, sizeof(log_entry_header), PROT_READ, MAP_PRIVATE, fd, 0);
     if ( MAP_FAILED == file_start )
-        return NULL;
+        return;
 
     // read entry header informations
     log_type = ((log_entry_header*)file_start)->logType;
-    entry_size = ((log_entry_header*)file_start)->entrySize;
-    munmap(file_start, size_entry_header);
+    auth_entry_size = ((log_entry_header*)file_start)->entrySize;
+    munmap(file_start, sizeof(log_entry_header));
 
     // get file size
     status = stat(input, &statbuf);
     if (status != 0)
-        return NULL;
+        return;
     file_size = statbuf.st_size;
 
     // the first structure should always be an authentication one
@@ -431,22 +433,18 @@ void readCredsEntryData(
         // re-map with the full file size
         file_start = mmap(NULL, file_size, PROT_READ, MAP_PRIVATE, fd, 0);
         if ( !file_start )
-            return NULL;
+            return;
 
         // skip the first structure to get to the password entries
-        first_entry = file_start + entry_size;
+        first_entry = file_start + auth_entry_size;
 
-        logIntoBuf(0, log_buffer, creds_entry_log_id, first_entry, file_size - entry_size);
+        logIntoBuf(0, log_buffer, creds_entry_log_id, first_entry, file_size - auth_entry_size);
     }
 
-    if (file_start)
-        munmap(file_start, file_size);
-}
+    // truncate the file to keep only the auth data beacause password entries
+    // will be re-encrypted with another key at program exit
+    ftruncate(fd, auth_entry_size);
 
-/*
-void unmapFile()
-{
-    if (file_start)
-        munmap(file_start, file_size);
+    if (fd) close(fd);
+    if (file_start) munmap(file_start, file_size);
 }
-*/
