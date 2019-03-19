@@ -313,7 +313,7 @@ void updateMemberInFile(
     unsigned long new_value)
 {
     unsigned long log_type = 0, entry_size = 0;
-    unsigned long size_entry_header = sizeof(unsigned long) * 2;
+    unsigned long size_entry_header = sizeof(log_entry_header);
     void* buffer = NULL, *tmp = NULL;
     int fd = 0;
 
@@ -345,7 +345,7 @@ void updateMemberInFile(
                 break;
             case F_ENTRIES_SIZE:
                 // each structure start by a struct header so add this size too
-                ((pass_auth_log*)tmp)->entries_total_size += new_value + size_entry_header;
+                ((pass_auth_log*)tmp)->entries_total_size += new_value;
                 break;
             default:
                 break;
@@ -428,8 +428,6 @@ void readCredsEntryData(
 
     // the first structure should always be an authentication one
     if ( log_type == pass_auth_log_id ) {
-        printf("file_size = %ld\n", file_size);
-
         // re-map with the full file size
         file_start = mmap(NULL, file_size, PROT_READ, MAP_PRIVATE, fd, 0);
         if ( !file_start )

@@ -69,7 +69,7 @@ status_t pm_login(pm_user* user, unsigned short method)
                     readPassAuthData(
                         input,
                         &user->iv,
-                        &h_login, &h_pass, &(user->salt),
+                        &h_login, &h_pass, &user->salt,
                         &user->nb_pass, &user->entries_total_size);
 
                     // compare
@@ -90,8 +90,6 @@ status_t pm_login(pm_user* user, unsigned short method)
                         if ( !user->auth ) {
                             FREE(user->iv);
                             FREE(user->salt);
-                            FREE(user->login);
-                            FREE(user->pass);
                         }
                     }
                 }
@@ -171,6 +169,9 @@ status_t pm_create_user(log_info* log_buffer, pm_user* user, unsigned short meth
         putchar('\n');
 #endif
 
+        // TODO : replace this by something better : prb when a user is deleted
+        // (along with his file)
+
         // compute ID based on current number of user (1 per file in 'data/')
         id = utils_count_file_dir("data/") + 1;
 
@@ -205,7 +206,8 @@ exit:
 status_t pm_add_password(log_info* log_buffer, pm_user* user)
 {
     char* platform = NULL, *login = NULL, *pass = NULL, *tmp = NULL;
-    unsigned short mismatch = 1;
+    char mismatch = 1;
+    unsigned long sum_length = 0;
 
     // take user input
     printf("Platform: ");
@@ -227,7 +229,11 @@ status_t pm_add_password(log_info* log_buffer, pm_user* user)
 
     logCredsEntryData(log_buffer, user->db, platform, login, pass);
     user->nb_pass += 1;
-    updateMemberInFile(user->db, F_NB_PASS, user->nb_pass);
+
+    // update sum of size of all passwords
+    sum_length = sizeof(unsigned long) * 3; // cf. creds_entry_log struct in logger.h
+    sum_length += strlen(platform) + strlen(login) + strlen(pass) + 3; // 3 null char
+    user->entries_total_size += sum_length + sizeof(log_entry_header);
 
     FREE(platform);
     FREE(login);
@@ -240,8 +246,69 @@ status_t pm_add_password(log_info* log_buffer, pm_user* user)
 /*
  * Delete a password in the file of the corresponding user.
  */
-status_t pm_delete_password()
+status_t pm_delete_password(log_info* log_buffer, pm_user* user, char* to_delete)
 {
+    log_entry_header* header = NULL;
+    creds_entry_log* entry = NULL;
+    unsigned char* new_buf = NULL;
+    unsigned long entry_size = 0, diff = 0;
+    char* tmp = NULL;
+    size_t new_size = 0;
+
+    if ( !log_buffer->buf )
+        return PM_FAILURE;
+
+    new_buf = utils_malloc((size_t)user->entries_total_size);
+    printf("(debug) entries_total_size = %ld\n", user->entries_total_size);
+
+    header = (log_entry_header*)log_buffer->buf;
+    entry = (creds_entry_log*)(log_buffer->buf + sizeof(log_entry_header));
+
+    // go through the structures containing passwords
+    for (unsigned long i = 0; i < user->nb_pass; i++) {
+        printf("header : %p\n", header);
+        if (header->logType == creds_entry_log_id) {
+            entry_size = header->entrySize;
+            printf("entry_size = %ld\n", entry_size);
+
+            tmp = (char*) &entry->platform;
+
+            printf("a: %s\nb: %s\n", to_delete, tmp);
+            if ( strcmp(tmp, to_delete) != 0 ) {
+                memcpy(new_buf + new_size, header, entry_size);
+                new_size += entry_size;
+            }
+        }
+
+        // update pointers to point to the next structure
+        //
+        // header need to be casted to void* (or char*) before the addition
+        // otherwise it adds more than desired (we want to add unit not
+        // increment of n elements)
+        header = (log_entry_header*) ((void*)header + entry_size);
+        entry = (creds_entry_log*) ((void*)header + sizeof(log_entry_header));
+    }
+
+    // if these two size are equals it means that what was asked to be deleted
+    // didn't exist, so no need to modify anything
+    if ( new_size < user->entries_total_size ) {
+        // replace current user's buffer
+        memcpy(log_buffer->buf, new_buf, new_size);
+        
+        // update the size of the log buffer and the number of passwords
+        diff = user->entries_total_size - new_size;
+        user->entries_total_size = new_size;
+        printf("log_buffer->size = %ld\n", log_buffer->size);
+        log_buffer->size -= diff;
+        printf("diff = %ld\n", diff);
+        printf("log_buffer->size = %ld\n", log_buffer->size);
+
+        user->nb_pass -= 1;
+        updateMemberInFile(user->db, F_NB_PASS, user->nb_pass);
+    }
+
+    FREE(new_buf);
+
     return PM_SUCCESS;
 }
 
@@ -260,7 +327,6 @@ status_t pm_print_all(log_info* log_buffer, pm_user* user)
 {
     log_entry_header* header = NULL;
     creds_entry_log* entry = NULL;
-    unsigned long log_type = 0;
     unsigned long platform_length = 0, login_length = 0, pass_length = 0;
     char* tmp = NULL;
 
@@ -274,9 +340,7 @@ status_t pm_print_all(log_info* log_buffer, pm_user* user)
 
     // go through the structures containing passwords
     for (unsigned long i = 0; i < user->nb_pass; i++) {
-        log_type = header->logType;
-
-        if (log_type == creds_entry_log_id) {
+        if (header->logType == creds_entry_log_id) {
             platform_length = entry->platform_length;
             login_length = entry->login_length;
             pass_length = entry->pass_length;
@@ -396,12 +460,22 @@ exit:
     return data_dec;
 }
 
+void free_user(pm_user* user)
+{
+    FREE(user->iv);
+    FREE(user->salt);
+    FREE(user->login);
+    FREE(user->pass);
+    FREE(user);
+}
+
 int main(void)
 {
     unsigned char* tmp = NULL;
     unsigned short choice = 0;
     pm_user* user = NULL;
     log_info log_buffer;
+    char* s = NULL;
 
     log_buffer.buf = NULL;
     log_buffer.ptr = NULL;
@@ -425,6 +499,7 @@ int main(void)
                 break;
             case 3:
                 pm_create_user(&log_buffer, user, LOGIN_PASS);
+                FREE(log_buffer.buf);
                 break;
             case 4:
                 goto exit;
@@ -437,10 +512,9 @@ int main(void)
 
     // At this point the user is authenticated.
 
-    // TODO : segfault when create user -> login as another one
-
     // get start address of passwords entries and decrypt user's passwords
     readCredsEntryData(&log_buffer, user->db);
+    printf("user->pass = %s\n", user->pass);
     tmp = pm_decrypt_data(&log_buffer, user);
 
 #ifdef PM_DEBUG_1
@@ -472,6 +546,10 @@ int main(void)
                 pm_add_password(&log_buffer, user);
                 break;
             case 2:
+                printf("Platform to delete credentials for: ");
+                s = io_get_string(BUF_SIZE);
+                pm_delete_password(&log_buffer, user, s);
+                FREE(s);
                 break;
             case 3:
                 break;
@@ -499,14 +577,14 @@ int main(void)
 
     flushToFile(&log_buffer, user->db);
 
+    // update nb pass and entries total size in the file
+    updateMemberInFile(user->db, F_NB_PASS, user->nb_pass);
+    updateMemberInFile(user->db, F_ENTRIES_SIZE, user->entries_total_size);
+
 exit:
     // Free resources.
     FREE(log_buffer.buf);
-    FREE(user->iv);
-    FREE(user->salt);
-    FREE(user->login);
-    FREE(user->pass);
-    FREE(user);
+    free_user(user);
 
     return PM_SUCCESS;
 }
