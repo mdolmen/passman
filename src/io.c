@@ -29,12 +29,13 @@ void io_menu(const char* user)
     printf(
         "\nWelcome %s"
         "\n========="
-        "\n  1. Add a password"
-        "\n  2. Delete a password (TODO)"
-        "\n  3. Edit a password (TODO)"
-        "\n  4. Display all my passwords"
-        "\n  5. Delete all my passwords (TODO)"
-        "\n  6. Seal and exit\n",
+        "\n  1. Display password"
+        "\n  2. Display all passwords"
+        "\n  3. Add a password"
+        "\n  4. Edit a password (TODO)"
+        "\n  5. Delete a password"
+        "\n  6. Delete all my passwords (TODO)"
+        "\n  7. Seal and exit\n",
         user);
 }
 

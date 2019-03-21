@@ -259,21 +259,17 @@ status_t pm_delete_password(log_info* log_buffer, pm_user* user, char* to_delete
         return PM_FAILURE;
 
     new_buf = utils_malloc((size_t)user->entries_total_size);
-    printf("(debug) entries_total_size = %ld\n", user->entries_total_size);
 
     header = (log_entry_header*)log_buffer->buf;
     entry = (creds_entry_log*)(log_buffer->buf + sizeof(log_entry_header));
 
     // go through the structures containing passwords
     for (unsigned long i = 0; i < user->nb_pass; i++) {
-        printf("header : %p\n", header);
         if (header->logType == creds_entry_log_id) {
             entry_size = header->entrySize;
-            printf("entry_size = %ld\n", entry_size);
 
             tmp = (char*) &entry->platform;
 
-            printf("a: %s\nb: %s\n", to_delete, tmp);
             if ( strcmp(tmp, to_delete) != 0 ) {
                 memcpy(new_buf + new_size, header, entry_size);
                 new_size += entry_size;
@@ -298,10 +294,7 @@ status_t pm_delete_password(log_info* log_buffer, pm_user* user, char* to_delete
         // update the size of the log buffer and the number of passwords
         diff = user->entries_total_size - new_size;
         user->entries_total_size = new_size;
-        printf("log_buffer->size = %ld\n", log_buffer->size);
         log_buffer->size -= diff;
-        printf("diff = %ld\n", diff);
-        printf("log_buffer->size = %ld\n", log_buffer->size);
 
         user->nb_pass -= 1;
         updateMemberInFile(user->db, F_NB_PASS, user->nb_pass);
@@ -317,6 +310,59 @@ status_t pm_delete_password(log_info* log_buffer, pm_user* user, char* to_delete
  */
 status_t pm_edit_password()
 {
+    return PM_SUCCESS;
+}
+
+/*
+ * Print a password.
+ */
+status_t pm_print(log_info* log_buffer, pm_user* user, char* platform)
+{
+    log_entry_header* header = NULL;
+    creds_entry_log* entry = NULL;
+    unsigned long platform_length = 0, login_length = 0, pass_length = 0;
+    char* tmp = NULL;
+
+    if ( !log_buffer->buf )
+        return PM_FAILURE;
+
+    header = (log_entry_header*)log_buffer->buf;
+    entry = (creds_entry_log*)(log_buffer->buf + sizeof(log_entry_header));
+
+    // go through the structures containing passwords
+    for (unsigned long i = 0; i < user->nb_pass; i++) {
+        if (header->logType == creds_entry_log_id) {
+            platform_length = entry->platform_length;
+            login_length = entry->login_length;
+            pass_length = entry->pass_length;
+
+            tmp = (char*) &entry->platform;
+
+            // display information only if an entry exist for 'platform'
+            if ( strcmp(tmp, platform) == 0 ) {
+                printf("\nCredentials for %s :\n", platform);
+
+                printf("\tPlatform: %s\n", tmp);
+                tmp += platform_length + 1;
+
+                printf("\tLogin: %s\n", tmp);
+                tmp += login_length + 1;
+
+                printf("\tPassword: %s\n", tmp);
+                tmp += pass_length + 1;
+            }
+            else {
+                tmp += platform_length + 1;
+                tmp += login_length + 1;
+                tmp += pass_length + 1;
+            }
+        }
+
+        // update pointers to point to the next structure
+        header = (log_entry_header*) tmp;
+        entry = (creds_entry_log*) (tmp + sizeof(log_entry_header));
+    }
+    
     return PM_SUCCESS;
 }
 
@@ -543,22 +589,28 @@ int main(void)
 
         switch (choice) {
             case 1:
-                pm_add_password(&log_buffer, user);
+                printf("Platform to display creds for: ");
+                s = io_get_string(BUF_SIZE);
+                pm_print(&log_buffer, user, s);
+                FREE(s);
                 break;
             case 2:
+                pm_print_all(&log_buffer, user);
+                break;
+            case 3:
+                pm_add_password(&log_buffer, user);
+                break;
+            case 4:
+                break;
+            case 5:
                 printf("Platform to delete credentials for: ");
                 s = io_get_string(BUF_SIZE);
                 pm_delete_password(&log_buffer, user, s);
                 FREE(s);
                 break;
-            case 3:
-                break;
-            case 4:
-                pm_print_all(&log_buffer, user);
-                break;
-            case 5:
-                break;
             case 6:
+                break;
+            case 7:
                 is_running = 0;
                 break;
             default:
