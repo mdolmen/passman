@@ -428,10 +428,17 @@ status_t pm_print_all(log_info* log_buffer, pm_user* user)
 }
 
 /*
- * Remove the file of the user.
+ * Remove all registered passwords of the user.
  */
-status_t pm_delete_all()
+status_t pm_delete_all(log_info* log_buffer, pm_user* user)
 {
+    memset(log_buffer->buf, '\x00', log_buffer->size);
+
+    log_buffer->size = 0;
+
+    user->nb_pass = 0;
+    user->entries_total_size = 0;
+
     return PM_SUCCESS;
 }
 
@@ -628,6 +635,7 @@ int main(void)
                 FREE(s);
                 break;
             case 6:
+                pm_delete_all(&log_buffer, user);
                 break;
             case 7:
                 is_running = 0;
