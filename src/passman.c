@@ -203,15 +203,23 @@ exit:
 /*
  * Add a password in the file of the corresponding user.
  */
-status_t pm_add_password(log_info* log_buffer, pm_user* user)
+status_t pm_add_password(log_info* log_buffer, pm_user* user, char* p)
 {
     char* platform = NULL, *login = NULL, *pass = NULL, *tmp = NULL;
     char mismatch = 1;
     unsigned long sum_length = 0;
+    size_t l = 0;
 
     // take user input
-    printf("Platform: ");
-    platform = io_get_string(BUF_SIZE);
+    if ( p ) {
+        l = strlen(p) + 1;
+        platform = utils_malloc(l);
+        memcpy(platform, p, l);
+    }
+    else {
+        printf("Platform: ");
+        platform = io_get_string(BUF_SIZE);
+    }
     printf("Login: ");
     login = io_get_string(BUF_SIZE);
 
@@ -244,7 +252,7 @@ status_t pm_add_password(log_info* log_buffer, pm_user* user)
 }
 
 /*
- * Delete a password in the file of the corresponding user.
+ * Delete a password.
  */
 status_t pm_delete_password(log_info* log_buffer, pm_user* user, char* to_delete)
 {
@@ -255,7 +263,7 @@ status_t pm_delete_password(log_info* log_buffer, pm_user* user, char* to_delete
     char* tmp = NULL;
     size_t new_size = 0;
 
-    if ( !log_buffer->buf )
+    if ( !log_buffer->buf || !to_delete )
         return PM_FAILURE;
 
     new_buf = utils_malloc((size_t)user->entries_total_size);
@@ -306,10 +314,17 @@ status_t pm_delete_password(log_info* log_buffer, pm_user* user, char* to_delete
 }
 
 /*
- * Edit a password in the file of the corresponding user.
+ * Edit a password.
  */
-status_t pm_edit_password()
+status_t pm_edit_password(log_info* log_buffer, pm_user* user, char* platform)
 {
+    if ( !log_buffer || !platform )
+        return PM_FAILURE;
+
+    pm_delete_password(log_buffer, user, platform);
+
+    pm_add_password(log_buffer, user, platform);
+
     return PM_SUCCESS;
 }
 
@@ -323,7 +338,7 @@ status_t pm_print(log_info* log_buffer, pm_user* user, char* platform)
     unsigned long platform_length = 0, login_length = 0, pass_length = 0;
     char* tmp = NULL;
 
-    if ( !log_buffer->buf )
+    if ( !log_buffer->buf || !platform )
         return PM_FAILURE;
 
     header = (log_entry_header*)log_buffer->buf;
@@ -589,7 +604,7 @@ int main(void)
 
         switch (choice) {
             case 1:
-                printf("Platform to display creds for: ");
+                printf("Entry to display creds for: ");
                 s = io_get_string(BUF_SIZE);
                 pm_print(&log_buffer, user, s);
                 FREE(s);
@@ -598,9 +613,13 @@ int main(void)
                 pm_print_all(&log_buffer, user);
                 break;
             case 3:
-                pm_add_password(&log_buffer, user);
+                pm_add_password(&log_buffer, user, NULL);
                 break;
             case 4:
+                printf("Entry to edit: ");
+                s = io_get_string(BUF_SIZE);
+                pm_edit_password(&log_buffer, user, s);
+                FREE(s);
                 break;
             case 5:
                 printf("Platform to delete credentials for: ");
