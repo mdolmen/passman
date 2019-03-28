@@ -8,7 +8,7 @@
 #define SALT_SIZE   64
 
 // uncomment to disable debug output
-#define PM_DEBUG_1
+//#define PM_DEBUG_1
 
 #define FREE(x) if(x) { free(x); x = NULL; }
 

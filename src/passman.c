@@ -18,9 +18,13 @@
 
 static volatile short is_running = 1;
 
+/*
+ * Custom handling of Ctrl-C for clean exit.
+ */
 void sigint_handler(int signum)
 {
-    is_running = 0;
+    if (SIGINT == signum)
+        is_running = 0;
 }
 
 /*
@@ -187,6 +191,7 @@ status_t pm_create_user(log_info* log_buffer, pm_user* user, unsigned short meth
             h_pass,
             salt
         );
+        printf("\n[+] User %s created with success.", user->login);
     }
     else {
         // TODO : take user input (login + key path)
@@ -611,7 +616,7 @@ int main(void)
 
         switch (choice) {
             case 1:
-                printf("Entry to display creds for: ");
+                printf("\nEntry to display creds for: ");
                 s = io_get_string(BUF_SIZE);
                 pm_print(&log_buffer, user, s);
                 FREE(s);
@@ -623,13 +628,13 @@ int main(void)
                 pm_add_password(&log_buffer, user, NULL);
                 break;
             case 4:
-                printf("Entry to edit: ");
+                printf("\nEntry to edit: ");
                 s = io_get_string(BUF_SIZE);
                 pm_edit_password(&log_buffer, user, s);
                 FREE(s);
                 break;
             case 5:
-                printf("Platform to delete credentials for: ");
+                printf("\nPlatform to delete credentials for: ");
                 s = io_get_string(BUF_SIZE);
                 pm_delete_password(&log_buffer, user, s);
                 FREE(s);
@@ -659,6 +664,7 @@ int main(void)
     // update nb pass and entries total size in the file
     updateMemberInFile(user->db, F_NB_PASS, user->nb_pass);
     updateMemberInFile(user->db, F_ENTRIES_SIZE, user->entries_total_size);
+    puts("[+] Done");
 
 exit:
     // Free resources.
