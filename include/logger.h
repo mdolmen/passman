@@ -42,6 +42,7 @@ void logIntoBuf(
     unsigned long dataSize);
 
 /*
+ * Write data to a file on disk.
  */
 void flushToFile(log_info* log_buffer, char* output);
 
